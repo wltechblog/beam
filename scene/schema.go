@@ -43,12 +43,16 @@ type Material struct {
 	Color     []float64 `json:"color,omitempty"`
 	Pattern   *Pattern  `json:"pattern,omitempty"` // overrides Color for albedo
 	Roughness float64   `json:"roughness,omitempty"`
-	// Reflectivity raises glass Fresnel base (POV reflection {min,max fresnel})
+	// Reflectivity raises glass Fresnel base; on metal it is the reflection
+	// strength (POV `reflection` value, 0..1).
 	Reflectivity float64 `json:"reflectivity,omitempty"`
 	IOR          float64 `json:"ior,omitempty"`      // glass index of refraction
 	Power        float64 `json:"power,omitempty"`    // emissive multiplier
 	Diffuse      float64 `json:"diffuse,omitempty"`  // matte direct scale (POV finish diffuse)
 	Specular     float64 `json:"specular,omitempty"` // matte highlight strength (POV finish specular)
+	// Metallic=true (default) on metal: reflection tinted by pigment (conductor).
+	// Metallic=false: UNTINTED reflection (POV-Ray `reflection` without `metallic`).
+	Metallic bool `json:"metallic,omitempty"`
 }
 
 // Transform is translate * rotate(ZYX, degrees) * scale.

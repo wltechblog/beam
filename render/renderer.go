@@ -271,16 +271,53 @@ func (r *Renderer) shade(ray geom.Ray, hit *geom.Hit, obj *Object3D, depth int, 
 	case 'g': // glass
 		return r.glass(ray, hit, mat, depth, rng)
 	case 'M': // metal
-		var out geom.Vec3
+		var reflOut geom.Vec3
 		if depth > 1 {
 			rd := reflectDir(ray.Dir, n)
 			rd = perturb(rd, mat.Roughness, rng)
 			refl := r.trace(offset(p, n, rd), depth-1, rng)
-			out = mulV(refl, albedo)
+			if mat.Untinted {
+				reflOut = refl.MulS(mat.Reflectivity)
+			} else {
+				reflOut = mulV(refl, albedo).MulS(mat.Reflectivity)
+			}
 		}
-		// analytic highlights: point lights are not scene geometry, so
-		// mirror reflections never catch them without this
-		return out.Add(r.specular(p, n, ray.Dir.MulS(-1), mat, albedo, 1))
+		// POV default reflection (untinted) also shows diffuse under it,
+		// scaled by remaining energy; keep specular highlight on top.
+		var out geom.Vec3
+		if mat.Untinted {
+			// matte-style diffuse term scaled by (1 - reflectivity)
+			out = mulV(albedo, r.World.AmbientColor).MulS(r.World.Ambient * (1 - mat.Reflectivity))
+			for i := range r.World.Lights {
+				l := &r.World.Lights[i]
+				ld, dist := lightDir(l, p)
+				if ld == (geom.Vec3{}) {
+					continue
+				}
+				ndotl := n.Dot(ld)
+				if ndotl <= 0 {
+					continue
+				}
+				trans := geom.Vec3{X: 1, Y: 1, Z: 1}
+				if !l.Shadowless {
+					shadowRay := offset(p, n, ld)
+					trans = r.shadowTrans(shadowRay.Orig, ld, dist)
+					if trans.X <= 0 && trans.Y <= 0 && trans.Z <= 0 {
+						continue
+					}
+				}
+				atten := lightAttenuation(l, dist)
+				lit := mulV(albedo, l.Color).MulS(ndotl * l.Intensity * mat.Diffuse * (1 - mat.Reflectivity) * atten)
+				out = out.Add(mulV(lit, trans))
+			}
+		}
+		out = out.Add(reflOut)
+		if mat.SpecularK > 0 {
+			out = out.Add(r.specular(p, n, ray.Dir.MulS(-1), mat, geom.Vec3{X: 1, Y: 1, Z: 1}, mat.SpecularK))
+		} else {
+			out = out.Add(r.specular(p, n, ray.Dir.MulS(-1), mat, geom.Vec3{X: 1, Y: 1, Z: 1}, 1))
+		}
+		return out
 	}
 
 	// matte: ambient + direct light with shadows

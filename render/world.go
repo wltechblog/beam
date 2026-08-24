@@ -88,6 +88,7 @@ type CompiledMaterial struct {
 	Power        float64
 	Diffuse      float64 // matte direct-light scale (default 1)
 	SpecularK    float64 // matte specular highlight strength (default 0)
+	Untinted     bool    // reflection untinted (POV reflection w/o metallic)
 }
 
 func rgb(c []float64) geom.Vec3 {
@@ -126,6 +127,11 @@ func compileMaterial(m *scene.Material) CompiledMaterial {
 	case "metal":
 		cm.Kind = 'M'
 		cm.Roughness = m.Roughness
+		cm.Reflectivity = m.Reflectivity
+		if cm.Reflectivity == 0 {
+			cm.Reflectivity = 1 // default full-strength when unset
+		}
+		cm.Untinted = !m.Metallic
 	case "glass":
 		cm.Kind = 'g'
 		cm.IOR = m.IOR

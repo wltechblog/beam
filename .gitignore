@@ -1,0 +1,3 @@
+/beam
+*.png
+!docs/*.png

@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "camera": {
+    "pos": [
+      0,
+      0.45,
+      -5.2
+    ],
+    "lookAt": [
+      0,
+      0.45,
+      0
+    ],
+    "fov": 52
+  },
+  "environment": {
+    "color": [
+      0.02,
+      0.02,
+      0.03
+    ],
+    "ambient": 0.35
+  },
+  "materials": {
+    "word": {
+      "type": "matte",
+      "color": [
+        0.95,
+        0.93,
+        0.9
+      ]
+    }
+  },
+  "objects": [
+    {
+      "type": "text",
+      "material": "word",
+      "text": "BEAM",
+      "size": 0.85,
+      "depth": 0.2,
+      "font": "bold",
+      "transform": {
+        "translate": [
+          -1.1,
+          0.02,
+          -0.3
+        ]
+      }
+    }
+  ],
+  "lights": [
+    {
+      "type": "point",
+      "pos": [
+        3,
+        4,
+        -4
+      ],
+      "intensity": 60
+    },
+    {
+      "type": "point",
+      "pos": [
+        -3,
+        3,
+        -4
+      ],
+      "intensity": 40
+    }
+  ],
+  "render": {
+    "width": 900,
+    "height": 400,
+    "samples": 4,
+    "maxDepth": 4,
+    "output": "textcheck.png"
+  }
+}

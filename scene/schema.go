@@ -45,8 +45,10 @@ type Material struct {
 	Roughness float64   `json:"roughness,omitempty"`
 	// Reflectivity raises glass Fresnel base (POV reflection {min,max fresnel})
 	Reflectivity float64 `json:"reflectivity,omitempty"`
-	IOR       float64   `json:"ior,omitempty"`   // glass index of refraction
-	Power     float64   `json:"power,omitempty"` // emissive multiplier
+	IOR          float64 `json:"ior,omitempty"`      // glass index of refraction
+	Power        float64 `json:"power,omitempty"`    // emissive multiplier
+	Diffuse      float64 `json:"diffuse,omitempty"`  // matte direct scale (POV finish diffuse)
+	Specular     float64 `json:"specular,omitempty"` // matte highlight strength (POV finish specular)
 }
 
 // Transform is translate * rotate(ZYX, degrees) * scale.
@@ -83,12 +85,14 @@ type Object struct {
 
 // Light is a tagged union of light kinds.
 type Light struct {
-	Type      string    `json:"type"` // point | directional | spot
-	Pos       []float64 `json:"pos,omitempty"`
-	Dir       []float64 `json:"dir,omitempty"`
-	Color     []float64 `json:"color,omitempty"`
-	Intensity float64   `json:"intensity,omitempty"`
-	Angle     float64   `json:"angle,omitempty"` // spot half-angle, degrees
+	Type       string    `json:"type"` // point | directional | spot
+	Pos        []float64 `json:"pos,omitempty"`
+	Dir        []float64 `json:"dir,omitempty"`
+	Color      []float64 `json:"color,omitempty"`
+	Intensity  float64   `json:"intensity,omitempty"`
+	Angle      float64   `json:"angle,omitempty"`   // spot half-angle, degrees
+	Falloff    string    `json:"falloff,omitempty"` // "" | "quadratic" (default) | "none"
+	Shadowless bool      `json:"shadowless,omitempty"`
 }
 
 // SkyStop is one entry of a piecewise sky gradient keyed by ray dir.Y
@@ -149,6 +153,7 @@ type RenderOpts struct {
 	Seed     int64   `json:"seed,omitempty"`
 	Exposure float64 `json:"exposure,omitempty"`
 	Output   string  `json:"output,omitempty"`
+	Tonemap  string  `json:"tonemap,omitempty"` // "" | "reinhard" (default) | "clip" (POV-style)
 }
 
 // Default material used when an object references a missing material.

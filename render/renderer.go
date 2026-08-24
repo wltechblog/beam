@@ -16,14 +16,15 @@ import (
 // MaxDepth bounces. One RNG per pixel, threaded through recursion —
 // same scene + seed = byte-identical PNG on any machine.
 type Renderer struct {
-	World    *World
-	Camera   *Camera
-	Width    int
-	Height   int
-	Samples  int
-	MaxDepth int
-	Exposure float64
-	Seed     int64
+	World       *World
+	Camera      *Camera
+	Width       int
+	Height      int
+	Samples     int
+	MaxDepth    int
+	Exposure    float64
+	ClipTonemap bool // POV-style: clip instead of Reinhard
+	Seed        int64
 }
 
 // Render produces the image using one worker goroutine per CPU. onTile
@@ -86,7 +87,7 @@ func (r *Renderer) renderTile(img *image.RGBA, row, col, size int) {
 				}
 			}
 			avg := acc.MulS(1 / float64(n*n))
-			r8, g8, b8, a8 := tonemap(avg, r.Exposure)
+			r8, g8, b8, a8 := tonemap(avg, r.Exposure, r.ClipTonemap)
 			img.SetRGBA(x, y, color.RGBA{r8, g8, b8, a8})
 		}
 	}
@@ -294,14 +295,21 @@ func (r *Renderer) shade(ray geom.Ray, hit *geom.Hit, obj *Object3D, depth int, 
 		if ndotl <= 0 {
 			continue
 		}
-		shadowRay := offset(p, n, ld)
-		trans := r.shadowTrans(shadowRay.Orig, ld, dist)
-		if trans.X <= 0 && trans.Y <= 0 && trans.Z <= 0 {
-			continue
+		trans := geom.Vec3{X: 1, Y: 1, Z: 1}
+		if !l.Shadowless {
+			shadowRay := offset(p, n, ld)
+			trans = r.shadowTrans(shadowRay.Orig, ld, dist)
+			if trans.X <= 0 && trans.Y <= 0 && trans.Z <= 0 {
+				continue
+			}
 		}
 		atten := lightAttenuation(l, dist)
-		lit := mulV(albedo, l.Color).MulS(ndotl * l.Intensity * atten)
+		lit := mulV(albedo, l.Color).MulS(ndotl * l.Intensity * mat.Diffuse * atten)
 		out = out.Add(mulV(lit, trans))
+	}
+	if mat.SpecularK > 0 {
+		// POV finish specular: highlight takes light color, NOT pigment tint
+		out = out.Add(r.specular(p, n, ray.Dir.MulS(-1), mat, geom.Vec3{X: 1, Y: 1, Z: 1}, mat.SpecularK))
 	}
 	return out
 }
@@ -454,17 +462,19 @@ func lightDir(l *LightDef, p geom.Vec3) (geom.Vec3, float64) {
 }
 
 func lightAttenuation(l *LightDef, dist float64) float64 {
-	if l.Kind == 'd' || dist == math.MaxFloat64 {
+	if l.Kind == 'd' || dist == math.MaxFloat64 || l.NoFalloff {
 		return 1
 	}
 	return 1 / (1 + 0.09*dist + 0.032*dist*dist)
 }
 
-// tonemap applies exposure + Reinhard + sRGB encoding and returns 8-bit RGBA.
-func tonemap(c geom.Vec3, exposure float64) (uint8, uint8, uint8, uint8) {
+// tonemap applies exposure + (Reinhard or clip) + sRGB encoding and returns 8-bit RGBA.
+func tonemap(c geom.Vec3, exposure float64, clip bool) (uint8, uint8, uint8, uint8) {
 	f := func(x float64) uint8 {
 		x *= exposure
-		x = x / (1 + x) // Reinhard
+		if !clip {
+			x = x / (1 + x) // Reinhard
+		}
 		if x < 0 {
 			x = 0
 		}

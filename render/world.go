@@ -35,11 +35,11 @@ type World struct {
 	SkyCurve    float64 // exponent on gradient t; 0 or 1 = linear
 	// SkyStops is a piecewise gradient keyed by dir.Y, taking precedence
 	// over the 2/3-stop Sky when non-empty.
-	SkyStops []SkyStop
-	Ambient     float64
+	SkyStops     []SkyStop
+	Ambient      float64
 	AmbientColor geom.Vec3
-	Lights      []LightDef
-	Fog         *FogDef
+	Lights       []LightDef
+	Fog          *FogDef
 }
 
 // FogDef is compiled fog parameters (exponential + ground-fog falloff).
@@ -68,22 +68,26 @@ type Object3D struct {
 
 // LightDef is a compiled light.
 type LightDef struct {
-	Kind      byte // 'p' point, 'd' directional, 's' spot
-	Pos, Dir  geom.Vec3
-	Color     geom.Vec3
-	Intensity float64
-	CosAngle  float64 // spot: cosine of half-angle
+	Kind       byte // 'p' point, 'd' directional, 's' spot
+	Pos, Dir   geom.Vec3
+	Color      geom.Vec3
+	Intensity  float64
+	CosAngle   float64 // spot: cosine of half-angle
+	NoFalloff  bool    // POV default: point lights do not attenuate with distance
+	Shadowless bool    // skip shadow rays (POV shadowless keyword)
 }
 
 // CompiledMaterial holds runtime material parameters.
 type CompiledMaterial struct {
-	Kind      byte // 'm' matte, 'M' metal, 'g' glass, 'e' emissive
-	Albedo    geom.Vec3
-	Pattern   *scene.Pattern // nil = solid albedo
-	Roughness float64
-	IOR       float64
+	Kind         byte // 'm' matte, 'M' metal, 'g' glass, 'e' emissive
+	Albedo       geom.Vec3
+	Pattern      *scene.Pattern // nil = solid albedo
+	Roughness    float64
+	IOR          float64
 	Reflectivity float64 // glass Fresnel base override (0 = pure Schlick)
-	Power     float64
+	Power        float64
+	Diffuse      float64 // matte direct-light scale (default 1)
+	SpecularK    float64 // matte specular highlight strength (default 0)
 }
 
 func rgb(c []float64) geom.Vec3 {
@@ -105,11 +109,11 @@ func normv(v []float64) geom.Vec3 {
 func cosDeg(deg float64) float64 { return math.Cos(deg * math.Pi / 180) }
 
 func defaultMat() CompiledMaterial {
-	return CompiledMaterial{Kind: 'm', Albedo: geom.Vec3{X: 0.8, Y: 0.8, Z: 0.8}}
+	return CompiledMaterial{Kind: 'm', Albedo: geom.Vec3{X: 0.8, Y: 0.8, Z: 0.8}, Diffuse: 1}
 }
 
 func compileMaterial(m *scene.Material) CompiledMaterial {
-	cm := CompiledMaterial{Albedo: geom.Vec3{X: 0.8, Y: 0.8, Z: 0.8}}
+	cm := CompiledMaterial{Albedo: geom.Vec3{X: 0.8, Y: 0.8, Z: 0.8}, Diffuse: 1}
 	if m == nil {
 		cm.Kind = 'm'
 		return cm
@@ -138,6 +142,11 @@ func compileMaterial(m *scene.Material) CompiledMaterial {
 	default: // matte
 		cm.Kind = 'm'
 	}
+	cm.Diffuse = 1
+	if m.Diffuse > 0 {
+		cm.Diffuse = m.Diffuse
+	}
+	cm.SpecularK = m.Specular
 	return cm
 }
 

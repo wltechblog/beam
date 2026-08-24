@@ -63,14 +63,15 @@ func RenderScene(s *scene.Scene, opts Options) (string, error) {
 	)
 
 	r := &Renderer{
-		World:    world,
-		Camera:   cam,
-		Width:    width,
-		Height:   height,
-		Samples:  samples,
-		MaxDepth: s.Render.MaxDepth,
-		Exposure: s.Render.Exposure,
-		Seed:     s.Render.Seed,
+		World:       world,
+		Camera:      cam,
+		Width:       width,
+		Height:      height,
+		Samples:     samples,
+		MaxDepth:    s.Render.MaxDepth,
+		Exposure:    s.Render.Exposure,
+		ClipTonemap: s.Render.Tonemap == "clip",
+		Seed:        s.Render.Seed,
 	}
 
 	out := opts.Output

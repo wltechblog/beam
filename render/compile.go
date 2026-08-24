@@ -117,6 +117,10 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 	for i := range s.Lights {
 		l := &s.Lights[i]
 		ld := LightDef{Pos: rgbv(l.Pos), Dir: normv(l.Dir), Intensity: l.Intensity}
+		if l.Falloff == "none" {
+			ld.NoFalloff = true
+		}
+		ld.Shadowless = l.Shadowless
 		if ld.Intensity == 0 {
 			ld.Intensity = 1
 		}

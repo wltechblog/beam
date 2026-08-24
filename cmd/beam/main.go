@@ -76,4 +76,3 @@ func runFitCheck(path string, quiet bool) int {
 	}
 	return 0
 }
-

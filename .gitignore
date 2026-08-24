@@ -6,3 +6,4 @@
 pov-benchmark/obj-*.obj
 pov-benchmark/beam-benchmark.json
 pov-benchmark/*.png
+povray-src/

@@ -460,7 +460,7 @@ func lightAttenuation(l *LightDef, dist float64) float64 {
 	return 1 / (1 + 0.09*dist + 0.032*dist*dist)
 }
 
-// tonemap applies exposure + Reinhard and returns 8-bit RGBA.
+// tonemap applies exposure + Reinhard + sRGB encoding and returns 8-bit RGBA.
 func tonemap(c geom.Vec3, exposure float64) (uint8, uint8, uint8, uint8) {
 	f := func(x float64) uint8 {
 		x *= exposure
@@ -471,7 +471,17 @@ func tonemap(c geom.Vec3, exposure float64) (uint8, uint8, uint8, uint8) {
 		if x > 1 {
 			x = 1
 		}
+		x = linearToSRGB(x)
 		return uint8(x*255 + 0.5)
 	}
 	return f(c.X), f(c.Y), f(c.Z), 255
+}
+
+// linearToSRGB encodes a linear-light value in [0,1] with the standard
+// sRGB transfer function (matching POV-Ray's default output encoding).
+func linearToSRGB(x float64) float64 {
+	if x <= 0.0031308 {
+		return 12.92 * x
+	}
+	return 1.055*math.Pow(x, 1/2.4) - 0.055
 }

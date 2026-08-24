@@ -77,6 +77,9 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 			obj = Object3D{Kind: 'p', PlaneP: rgbv(o.Point), PlaneN: normv(o.Normal), MatIdx: mi}
 		case "box":
 			mesh := BoxMesh(rgbv(o.Min), rgbv(o.Max))
+			if o.Transform != nil {
+				mesh = transformMesh(mesh, o.Transform)
+			}
 			obj = Object3D{Kind: 'm', Mesh: mesh, BVH: geom.BuildMesh(mesh), MatIdx: mi}
 		case "mesh":
 			if resolver == nil {

@@ -220,9 +220,10 @@ func TestRenderEmissive(t *testing.T) {
 	}
 	img := renderToImage(t, s)
 	c := img.RGBAAt(32, 24)
-	// Reinhard: power 2 red -> 2/(1+2) = 2/3 -> 255*(2/3)+0.5 = 170.5 -> 170.
-	if math.Abs(float64(c.R)-170) > 2 || c.G > 10 || c.B > 10 {
-		t.Errorf("emissive red sphere: %+v (want R\u2248170 = 255\u00d72/3)", c)
+	// Reinhard + sRGB: power 2 red -> 2/(1+2) = 2/3 linear ->
+	// sRGB(2/3) = 1.055*(2/3)^(1/2.4)-0.055 = 0.8363 -> 255*0.8363+0.5 = 213.
+	if math.Abs(float64(c.R)-213) > 2 || c.G > 10 || c.B > 10 {
+		t.Errorf("emissive red sphere: %+v (want R\u2248213 = 255\u00d7sRGB(2/3))", c)
 	}
 }
 

@@ -93,9 +93,31 @@ type Light struct {
 type Environment struct {
 	Color   []float64 `json:"color"`
 	Ambient float64   `json:"ambient,omitempty"`
-	// Sky is an optional [zenith, horizon] gradient sampled by miss
-	// rays, giving glass and metal something believable to show.
-	Sky [2][]float64 `json:"sky,omitempty"`
+	// Sky is an optional gradient sampled by miss rays, giving glass and
+	// metal something believable to show. Two entries: [zenith, bottom].
+	// Three entries: [zenith, horizon, belowHorizon] — the horizon stop
+	// sits at dir.Y == 0.
+	Sky [3][]float64 `json:"sky,omitempty"`
+	// Fog blends distant surfaces toward Fog.Color with height falloff
+	// (POV fog_type 2 style): fully dense below Altitude, falling off
+	// exponentially above with scale Offset.
+	Fog *Fog `json:"fog,omitempty"`
+	// SkyCurve bends the gradient: t' = t^SkyCurve. 1 = linear;
+	// <1 keeps the zenith color closer to the horizon (POV-style skies
+	// that stay blue low down); >1 concentrates change near the horizon.
+	SkyCurve float64 `json:"skyCurve,omitempty"`
+}
+
+// Fog describes exponential distance fog with optional ground-fog height
+// falloff. Transmittance = exp(-k * integral of density along the ray),
+// where k = 1/Distance and density = 1 below Altitude, exp(-(h-alt)/Offset)
+// above.
+type Fog struct {
+	Color    []float64 `json:"color"`
+	Distance float64   `json:"distance"`           // e-folding distance at full density
+	Altitude float64   `json:"altitude,omitempty"` // dense below this height
+	Offset   float64   `json:"offset,omitempty"`   // falloff scale above Altitude (0 = hard cutoff)
+	MaxFog   float64   `json:"maxFog,omitempty"`   // blend cap, 0..1 (POV rgbt transparency)
 }
 
 // RenderOpts controls output.

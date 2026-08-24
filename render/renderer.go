@@ -93,24 +93,138 @@ func (r *Renderer) renderTile(img *image.RGBA, row, col, size int) {
 }
 
 // envAt returns environment radiance for a miss direction: flat color
-// or the zenith/horizon gradient blended on dir.Y.
+// or a gradient on dir.Y. With a horizon stop (EnvMid), the ramp is
+// zenith → horizon for dir.Y > 0 and horizon → below for dir.Y < 0.
 func (r *Renderer) envAt(dir geom.Vec3) geom.Vec3 {
 	if !r.World.SkyGradient {
 		return r.World.EnvColor
 	}
 	t := dir.Y*0.5 + 0.5 // -1..1 → 0..1
-	return r.World.EnvBot.Add(r.World.EnvTop.Sub(r.World.EnvBot).MulS(t))
+	top, bot := r.World.EnvTop, r.World.EnvBot
+	if r.World.EnvMid != (geom.Vec3{}) {
+		if dir.Y >= 0 {
+			top, bot = r.World.EnvTop, r.World.EnvMid
+			t = dir.Y // 0..1 horizon→zenith
+		} else {
+			top, bot = r.World.EnvBot, r.World.EnvMid
+			t = -dir.Y // 0..1 horizon→below
+		}
+		if c := r.World.SkyCurve; c > 0 && c != 1 {
+			t = math.Pow(t, c)
+		}
+	}
+	return bot.Add(top.Sub(bot).MulS(t))
 }
 
-// trace follows one ray. depth caps reflection/refraction recursion.
+// trace follows one ray, compositing fog over the traversed segment.
+// depth caps reflection/refraction recursion.
 func (r *Renderer) trace(ray geom.Ray, depth int, rng *RNG) geom.Vec3 {
 	if depth <= 0 {
-		return r.envAt(ray.Dir)
+		return r.fogBlend(r.envAt(ray.Dir), ray.Orig, ray.Dir, fogFar)
 	}
 	hit, obj := r.World.Intersect(ray)
 	if hit == nil {
-		return r.envAt(ray.Dir)
+		return r.fogBlend(r.envAt(ray.Dir), ray.Orig, ray.Dir, fogFar)
 	}
+	c := r.shade(ray, hit, obj, depth, rng)
+	return r.fogBlend(c, ray.Orig, ray.Dir, hit.T)
+}
+
+// fogFar caps fog integration for miss rays; with any sane fog distance
+// the transmittance saturates long before this.
+const fogFar = 1e5
+
+// fogBlend applies exponential fog over the segment orig → orig+dir·dist.
+// c is the unfogged segment radiance.
+func (r *Renderer) fogBlend(c geom.Vec3, orig, dir geom.Vec3, dist float64) geom.Vec3 {
+	f := r.World.Fog
+	if f == nil {
+		return c
+	}
+	od := opticalDepth(f, orig.Y, dir.Y, dist)
+	tr := math.Exp(-f.K * od)
+	amt := 1 - tr
+	if amt > f.Max {
+		amt = f.Max
+	}
+	return c.MulS(1 - amt).Add(f.Color.MulS(amt))
+}
+
+// opticalDepth integrates fog density along a segment of length dist
+// starting at height y0 with vertical slope dy. Density is 1 below
+// FogDef.Alt; above it, Off > 0 gives exponential falloff and Off == 0
+// is a hard cutoff (POV fog_offset 0). Closed form — no sampling, so
+// renders stay deterministic.
+func opticalDepth(f *FogDef, y0, dy, dist float64) float64 {
+	if dist <= 0 {
+		return 0
+	}
+	const maxD = 1e6
+	if dist > maxD {
+		dist = maxD
+	}
+	alt := f.Alt
+	var total float64
+	addDense := func(a, b float64) {
+		if a < 0 {
+			a = 0
+		}
+		if b > dist {
+			b = dist
+		}
+		if b > a {
+			total += b - a
+		}
+	}
+	addExp := func(a, b float64) {
+		if a < 0 {
+			a = 0
+		}
+		if b > dist {
+			b = dist
+		}
+		if b <= a {
+			return
+		}
+		if math.Abs(dy) < 1e-12 {
+			total += (b - a) * math.Exp(-(y0-alt)/f.Off)
+			return
+		}
+		ga := math.Exp(-(y0 + dy*a - alt) / f.Off)
+		gb := math.Exp(-(y0 + dy*b - alt) / f.Off)
+		total += f.Off / dy * (ga - gb)
+	}
+	if math.Abs(dy) < 1e-12 {
+		if y0 <= alt {
+			return dist
+		}
+		if f.Off > 0 {
+			return dist * math.Exp(-(y0-alt)/f.Off)
+		}
+		return 0
+	}
+	sStar := (alt - y0) / dy // parameter where y crosses Alt
+	if f.Off > 0 {
+		if dy > 0 { // ascending: dense below Alt, sparse above
+			addDense(0, sStar)
+			addExp(sStar, dist)
+		} else { // descending: sparse above Alt, dense below
+			addExp(0, sStar)
+			addDense(sStar, dist)
+		}
+		return total
+	}
+	// hard cutoff: density only while below Alt
+	if dy > 0 {
+		addDense(0, sStar)
+	} else {
+		addDense(sStar, dist)
+	}
+	return total
+}
+
+// shade computes the surface response at a hit (no fog).
+func (r *Renderer) shade(ray geom.Ray, hit *geom.Hit, obj *Object3D, depth int, rng *RNG) geom.Vec3 {
 	mat := &r.World.Materials[obj.MatIdx]
 	albedo := mat.AlbedoAt(hit.P)
 	n := hit.N // oriented against the ray

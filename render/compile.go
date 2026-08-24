@@ -17,10 +17,27 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 	if s.Environment != nil && s.Environment.Ambient > 0 {
 		w.Ambient = s.Environment.Ambient
 	}
-	if s.Environment != nil && len(s.Environment.Sky) == 2 {
+	if s.Environment != nil && len(s.Environment.Sky[0]) > 0 {
 		w.SkyGradient = true
+		w.SkyCurve = s.Environment.SkyCurve
 		w.EnvTop = vec3Of(s.Environment.Sky[0])
 		w.EnvBot = vec3Of(s.Environment.Sky[1])
+		if s.Environment.Sky[2] != nil {
+			w.EnvMid = vec3Of(s.Environment.Sky[2])
+		}
+	}
+	if s.Environment != nil && s.Environment.Fog != nil {
+		f := s.Environment.Fog
+		w.Fog = &FogDef{
+			Color: rgb(f.Color),
+			K:     1.0 / f.Distance,
+			Alt:   f.Altitude,
+			Off:   f.Offset,
+			Max:   f.MaxFog,
+		}
+		if w.Fog.Max <= 0 {
+			w.Fog.Max = 1
+		}
 	}
 
 	matIdx := map[string]int{}

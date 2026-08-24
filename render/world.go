@@ -23,10 +23,22 @@ type World struct {
 	Materials   []CompiledMaterial
 	EnvColor    geom.Vec3
 	EnvTop      geom.Vec3
+	EnvMid      geom.Vec3 // optional 3rd sky stop at the horizon
 	EnvBot      geom.Vec3
 	SkyGradient bool
+	SkyCurve    float64 // exponent on gradient t; 0 or 1 = linear
 	Ambient     float64
 	Lights      []LightDef
+	Fog         *FogDef
+}
+
+// FogDef is compiled fog parameters (exponential + ground-fog falloff).
+type FogDef struct {
+	Color geom.Vec3
+	K     float64 // 1/e-folding distance
+	Alt   float64 // dense below this world-space height
+	Off   float64 // falloff scale above Alt; 0 = hard cutoff
+	Max   float64 // maximum fog blend factor
 }
 
 // Object3D is one renderable object (primitive or mesh instance).

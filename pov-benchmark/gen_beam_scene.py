@@ -46,7 +46,9 @@ def p2b_box(lo, hi):
 
 MATERIALS = {
     "sand": {
-        "type": "matte", "color": [1.0, 0.85, 0.6],
+        # lifted ~10% over POV's rgb<1,0.85,0.6> to stand in for POV's
+        # radiosity floor bounce (Beam has no GI)
+        "type": "matte", "color": [1.1, 0.95, 0.68],
     },
     "stone": {  # Stone_Tex: granite-ish
         "type": "matte", "color": [0.55, 0.52, 0.50],
@@ -59,7 +61,7 @@ MATERIALS = {
     "water": {  # M_Watx4: reflection 0.1-0.95 fresnel, ior 1.31, green fade
         # POV fades to green with DEPTH (fade_distance 0.8); glass tints per
         # interface instead, so use a much lighter tint to net a similar look
-        "type": "glass", "color": [0.55, 0.80, 0.62], "ior": 1.31,
+        "type": "glass", "color": [0.65, 0.88, 0.65], "ior": 1.31,
     },
     "metal": {  # Metal_Texture: copper-ish metallic reflection 0.8
         "type": "metal", "color": [0.65, 0.55, 0.5], "roughness": 0.01,
@@ -550,16 +552,38 @@ def build_scene():
         "environment": {
             "color": [0.62, 0.66, 0.78],
             "ambient": 0.75,
+            # 3-stop sky: [zenith, horizon, below-horizon]. Stops solved by
+            # inverting POV reference pixels through exposure 2.6 + Reinhard
+            # (POV's display gamma brightens its declared values considerably:
+            # grey 0.667 displays ~0.83, so our raw stops must be much higher).
             "sky": [
-                [0.52, 0.62, 0.98],   # zenith (blue)
-                [0.90, 0.94, 1.0],   # horizon (pale, near white)
+                [0.0, 0.05, 2.9],     # zenith (deep blue)
+                [2.8, 2.95, 2.85],    # horizon (POV near-horizon white ~225)
+                [2.87, 2.87, 2.83],   # below horizon
             ],
+            # POV's sky stays blue until close to the horizon (its gradient
+            # is non-linear); curve<1 holds zenith color low before snapping
+            # to white. Solved against reference rows +4.3°..0°.
+            "skyCurve": 0.5,
+            # POV benchmark: fog_type 2, alt 1.5, offset 0, rgbt <0.75,0.80,0.86,0.2>
+            # (t=0.2 → max 80% fog), distance 400. POV z-up 1.5 == Beam y 1.5.
+            # Color lifted into radiance space to match POV's gamma-brightened
+            # display (~225): raw 0.75 would display only 169 in our pipeline.
+            "fog": {
+                "color": [2.45, 3.05, 4.5],
+                "distance": 12,
+                "altitude": 1.5,
+                "offset": 0,
+                "maxFog": 0.8,
+            },
         },
         "lights": [
             {
                 "type": "directional",
                 # POV light at sun_pos*150000 shines toward origin: travel dir = -pos
                 "dir": [-sun_dir_pov[0], -sun_dir_pov[2], sun_dir_pov[1]],
+                # Empirically calibrated (raw POV 3.43/2.87/1.95 is too dark for
+                # Beam: POV's radiosity + media-attenuated sun ≈ our brighter direct)
                 "color": [6.0, 5.0, 3.4],
             },
             {

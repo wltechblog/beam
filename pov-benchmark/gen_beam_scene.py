@@ -416,6 +416,9 @@ def build_scene():
         "depth": 0.075,
         "material": "stone2",
         "transform": {
+            # POV bakes rotate 90*x into the text declare -> beam rotX(-90) (conjugated)
+            # +depth lift: beam extrudes [0,-d], POV slab sits [0,+d] above baseline
+            "rotate": [-90, 0, 0],
             "translate": p2b((-1.75, 0.995, 0.575)),
         },
     })
@@ -426,8 +429,8 @@ def build_scene():
         "depth": 0.075,
         "material": "stone2",
         "transform": {
+            "rotate": [-90, 0, 0],
             "translate": p2b((-0.5, -1.5, 0.575)),
-            "rotate": [0, 90, 0],
         },
     })
 
@@ -471,7 +474,7 @@ def build_scene():
         "type": "sphere",
         "center": p2b((lx - 0.2 + 0.6 * logo_scale, ly - 0.2, lz + 0.96)),
         "radius": 1.2 * logo_scale,
-        "transform": {"scale": [2.0, 1.0, 0.5], "rotate": [0, 30, 0]},
+        "transform": {"scale": [2.0, 1.0, 0.5], "rotate": [0, -30, 0]},
         "material": "logo",
     })
 
@@ -559,8 +562,8 @@ def build_scene():
             "fov": 45,
         },
         "environment": {
-            "color": [0.62, 0.66, 0.78],
-            "ambient": 0.38, "ambientColor": [0.55, 0.50, 0.42],
+            "color": [0.290, 0.285, 0.298],
+            "ambient": 0.38, "ambientColor": [0.257, 0.216, 0.161],
             # 3-stop sky: [zenith, horizon, below-horizon]. Stops solved by
             # inverting POV reference pixels through exposure 2.6 + Reinhard
             # (POV's display gamma brightens its declared values considerably:
@@ -573,15 +576,15 @@ def build_scene():
                 # y values = ACTUAL ray dir.Y per image row (corrected probe;
                 # camera pitch -8.4deg, image top = dir.Y 0.077). Colors =
                 # POV reference rows inverted through exposure 2.6 + Reinhard.
-                {"y": 0.10,   "color": [1.45, 2.45, 13.50]},  # just above frame
-                {"y": 0.074,  "color": [1.34, 2.20, 11.88]},  # fy=0.01 (198,217,247)
-                {"y": 0.061,  "color": [1.00, 1.58, 5.39]},   # fy=0.04 (184,205,238)
-                {"y": 0.043,  "color": [0.81, 1.22, 3.39]},   # fy=0.08 (173,194,229)
-                {"y": 0.025,  "color": [0.91, 1.22, 2.42]},   # fy=0.12 (179,194,220)
-                {"y": 0.007,  "color": [0.76, 0.83, 0.98]},   # fy=0.16 (169,174,183)
-                {"y": -0.011, "color": [0.65, 0.53, 0.51]},   # fy=0.20 (160,148,145)
-                {"y": -0.10,  "color": [0.58, 0.47, 0.45]},   # below frame
-                {"y": -1.0,   "color": [0.45, 0.35, 0.32]},
+                {"y": 0.10,   "color": [0.679, 1.059, 5.162]},  # just above frame
+                {"y": 0.074,  "color": [0.627, 0.951, 4.543]},  # fy=0.01 (198,217,247)
+                {"y": 0.061,  "color": [0.468, 0.683, 2.061]},   # fy=0.04 (184,205,238)
+                {"y": 0.043,  "color": [0.379, 0.528, 1.296]},   # fy=0.08 (173,194,229)
+                {"y": 0.025,  "color": [0.426, 0.528, 0.925]},   # fy=0.12 (179,194,220)
+                {"y": 0.007,  "color": [0.356, 0.359, 0.375]},   # fy=0.16 (169,174,183)
+                {"y": -0.011, "color": [0.304, 0.229, 0.195]},   # fy=0.20 (160,148,145)
+                {"y": -0.10,  "color": [0.271, 0.203, 0.172]},   # below frame
+                {"y": -1.0,   "color": [0.211, 0.151, 0.122]},
             ],
             # POV benchmark: fog_type 2, alt 1.5, offset 0, rgbt <0.75,0.80,0.86,0.2>
             # (t=0.2 -> max 80% fog), distance 400. Profile "atan" = POV's exact
@@ -589,7 +592,7 @@ def build_scene():
             # POV distance 400 renders nearly invisible; 60 tuned as media
             # proxy (POV's scene includes cloud media we don't model).
             "fog": {
-                "color": [0.45, 0.40, 0.35],
+                "color": [0.211, 0.173, 0.134],
                 "distance": 60,
                 "altitude": 1.5,
                 "offset": 0,
@@ -604,12 +607,12 @@ def build_scene():
                 "dir": p2b([-sun_dir_pov[0], -sun_dir_pov[1], -sun_dir_pov[2]]),
                 # Empirically calibrated (raw POV 3.43/2.87/1.95 is too dark for
                 # Beam: POV's radiosity + media-attenuated sun ≈ our brighter direct)
-                "color": [5.2, 4.4, 3.0],
+                "color": [2.441, 1.909, 1.150],
             },
             {
                 "type": "directional",
                 "dir": [-0.9, -0.5, -0.6],
-                "color": [0.6, 0.6, 0.6],
+                "color": [0.281, 0.259, 0.229],
             },
         ],
         "materials": MATERIALS,
@@ -620,7 +623,7 @@ def build_scene():
             "samples": 4,
             "maxDepth": 12,
             "seed": 45,
-            "exposure": 2.6,
+            "exposure": 1.0, "tonemap": "clip",
             "output": "beam-benchmark.png",
         },
     }

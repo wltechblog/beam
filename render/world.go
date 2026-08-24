@@ -18,6 +18,12 @@ type MeshResolver interface {
 }
 
 // World is the compiled scene: objects, materials, lights, environment.
+// SkyStop is one entry of the piecewise sky gradient (dir.Y keyed).
+type SkyStop struct {
+	Y     float64
+	Color geom.Vec3
+}
+
 type World struct {
 	Objects     []*Object3D
 	Materials   []CompiledMaterial
@@ -27,6 +33,9 @@ type World struct {
 	EnvBot      geom.Vec3
 	SkyGradient bool
 	SkyCurve    float64 // exponent on gradient t; 0 or 1 = linear
+	// SkyStops is a piecewise gradient keyed by dir.Y, taking precedence
+	// over the 2/3-stop Sky when non-empty.
+	SkyStops []SkyStop
 	Ambient     float64
 	Lights      []LightDef
 	Fog         *FogDef
@@ -39,6 +48,9 @@ type FogDef struct {
 	Alt   float64 // dense below this world-space height
 	Off   float64 // falloff scale above Alt; 0 = hard cutoff
 	Max   float64 // maximum fog blend factor
+	// Atan switches density to POV-Ray fog_type 2: 1/(u^2+1) with
+	// u = (y-Off)/Alt, whose segment integral is an atan difference.
+	Atan bool
 }
 
 // Object3D is one renderable object (primitive or mesh instance).

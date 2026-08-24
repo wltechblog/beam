@@ -17,7 +17,17 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 	if s.Environment != nil && s.Environment.Ambient > 0 {
 		w.Ambient = s.Environment.Ambient
 	}
-	if s.Environment != nil && len(s.Environment.Sky[0]) > 0 {
+	if s.Environment != nil && len(s.Environment.SkyMap) >= 2 {
+		for _, st := range s.Environment.SkyMap {
+			w.SkyStops = append(w.SkyStops, SkyStop{Y: st.Y, Color: vec3Of(st.Color)})
+		}
+		for i := 1; i < len(w.SkyStops); i++ { // insertion sort by Y
+			for j := i; j > 0 && w.SkyStops[j-1].Y > w.SkyStops[j].Y; j-- {
+				w.SkyStops[j-1], w.SkyStops[j] = w.SkyStops[j], w.SkyStops[j-1]
+			}
+		}
+		w.SkyGradient = true
+	} else if s.Environment != nil && len(s.Environment.Sky[0]) > 0 {
 		w.SkyGradient = true
 		w.SkyCurve = s.Environment.SkyCurve
 		w.EnvTop = vec3Of(s.Environment.Sky[0])
@@ -34,6 +44,7 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 			Alt:   f.Altitude,
 			Off:   f.Offset,
 			Max:   f.MaxFog,
+			Atan:  f.Profile == "atan",
 		}
 		if w.Fog.Max <= 0 {
 			w.Fog.Max = 1

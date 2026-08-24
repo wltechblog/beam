@@ -96,6 +96,9 @@ func (r *Renderer) renderTile(img *image.RGBA, row, col, size int) {
 // or a gradient on dir.Y. With a horizon stop (EnvMid), the ramp is
 // zenith → horizon for dir.Y > 0 and horizon → below for dir.Y < 0.
 func (r *Renderer) envAt(dir geom.Vec3) geom.Vec3 {
+	if len(r.World.SkyStops) >= 2 {
+		return skyMapAt(r.World.SkyStops, dir.Y)
+	}
 	if !r.World.SkyGradient {
 		return r.World.EnvColor
 	}
@@ -114,6 +117,26 @@ func (r *Renderer) envAt(dir geom.Vec3) geom.Vec3 {
 		}
 	}
 	return bot.Add(top.Sub(bot).MulS(t))
+}
+
+// skyMapAt samples the piecewise sky gradient at elevation dirY
+// (-1..1). Segments interpolate linearly; ends clamp.
+func skyMapAt(stops []SkyStop, dirY float64) geom.Vec3 {
+	n := len(stops)
+	if dirY <= stops[0].Y {
+		return stops[0].Color
+	}
+	if dirY >= stops[n-1].Y {
+		return stops[n-1].Color
+	}
+	for i := 1; i < n; i++ {
+		if dirY <= stops[i].Y {
+			a, b := stops[i-1], stops[i]
+			t := (dirY - a.Y) / (b.Y - a.Y)
+			return a.Color.Add(b.Color.Sub(a.Color).MulS(t))
+		}
+	}
+	return stops[n-1].Color
 }
 
 // trace follows one ray, compositing fog over the traversed segment.
@@ -202,6 +225,17 @@ func opticalDepth(f *FogDef, y0, dy, dist float64) float64 {
 			return dist * math.Exp(-(y0-alt)/f.Off)
 		}
 		return 0
+	}
+	if f.Atan {
+		// POV fog_type 2: density 1/(u^2+1), u = (y-Off)/Alt. The exact
+		// line integral is Alt*(atan(u2) - atan(u1))/dy — see POV-Ray
+		// source/core/render/trace.cpp ComputeGroundFogDepth.
+		u1 := (y0 - f.Off) / alt
+		u2 := (y0 + dy*dist - f.Off) / alt
+		if math.Abs(dy) < 1e-12 {
+			return dist / (u1*u1 + 1)
+		}
+		return alt * (math.Atan(u2) - math.Atan(u1)) / dy
 	}
 	sStar := (alt - y0) / dy // parameter where y crosses Alt
 	if f.Off > 0 {

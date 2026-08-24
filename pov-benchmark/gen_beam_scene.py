@@ -551,30 +551,41 @@ def build_scene():
         },
         "environment": {
             "color": [0.62, 0.66, 0.78],
-            "ambient": 0.75,
+            "ambient": 0.38,
             # 3-stop sky: [zenith, horizon, below-horizon]. Stops solved by
             # inverting POV reference pixels through exposure 2.6 + Reinhard
             # (POV's display gamma brightens its declared values considerably:
             # grey 0.667 displays ~0.83, so our raw stops must be much higher).
-            "sky": [
-                [0.0, 0.05, 2.9],     # zenith (deep blue)
-                [2.8, 2.95, 2.85],    # horizon (POV near-horizon white ~225)
-                [2.87, 2.87, 2.83],   # below horizon
+            # skyMap: piecewise gradient keyed by ray dir.Y, stops solved
+            # directly from POV reference rows (row -> camera elevation via
+            # env probe, then invert exposure 2.6 + Reinhard). The reference
+            # sky is far steeper near zenith than any 2-stop ramp can follow.
+            "skyMap": [
+                # y values = ACTUAL ray dir.Y per image row (corrected probe;
+                # camera pitch -8.4deg, image top = dir.Y 0.077). Colors =
+                # POV reference rows inverted through exposure 2.6 + Reinhard.
+                {"y": 0.10,   "color": [1.45, 2.45, 13.50]},  # just above frame
+                {"y": 0.074,  "color": [1.34, 2.20, 11.88]},  # fy=0.01 (198,217,247)
+                {"y": 0.061,  "color": [1.00, 1.58, 5.39]},   # fy=0.04 (184,205,238)
+                {"y": 0.043,  "color": [0.81, 1.22, 3.39]},   # fy=0.08 (173,194,229)
+                {"y": 0.025,  "color": [0.91, 1.22, 2.42]},   # fy=0.12 (179,194,220)
+                {"y": 0.007,  "color": [0.76, 0.83, 0.98]},   # fy=0.16 (169,174,183)
+                {"y": -0.011, "color": [0.65, 0.53, 0.51]},   # fy=0.20 (160,148,145)
+                {"y": -0.10,  "color": [0.58, 0.47, 0.45]},   # below frame
+                {"y": -1.0,   "color": [0.45, 0.35, 0.32]},
             ],
-            # POV's sky stays blue until close to the horizon (its gradient
-            # is non-linear); curve<1 holds zenith color low before snapping
-            # to white. Solved against reference rows +4.3°..0°.
-            "skyCurve": 0.5,
             # POV benchmark: fog_type 2, alt 1.5, offset 0, rgbt <0.75,0.80,0.86,0.2>
-            # (t=0.2 → max 80% fog), distance 400. POV z-up 1.5 == Beam y 1.5.
-            # Color lifted into radiance space to match POV's gamma-brightened
-            # display (~225): raw 0.75 would display only 169 in our pipeline.
+            # (t=0.2 -> max 80% fog), distance 400. Profile "atan" = POV's exact
+            # 1/(u^2+1) ground-fog density (trace.cpp ComputeGroundFogDepth).
+            # POV distance 400 renders nearly invisible; 60 tuned as media
+            # proxy (POV's scene includes cloud media we don't model).
             "fog": {
-                "color": [2.45, 3.05, 4.5],
-                "distance": 12,
+                "color": [0.45, 0.40, 0.35],
+                "distance": 60,
                 "altitude": 1.5,
                 "offset": 0,
-                "maxFog": 0.8,
+                "maxFog": 1.0,
+                "profile": "atan",
             },
         },
         "lights": [

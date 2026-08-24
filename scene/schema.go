@@ -89,6 +89,14 @@ type Light struct {
 	Angle     float64   `json:"angle,omitempty"` // spot half-angle, degrees
 }
 
+// SkyStop is one entry of a piecewise sky gradient keyed by ray dir.Y
+// (1 = zenith, 0 = horizon, -1 = nadir). Colors are linear radiance;
+// segments interpolate linearly and ends clamp.
+type SkyStop struct {
+	Y     float64   `json:"y"`
+	Color []float64 `json:"color"`
+}
+
 // Environment controls background and ambient light.
 type Environment struct {
 	Color   []float64 `json:"color"`
@@ -98,6 +106,9 @@ type Environment struct {
 	// Three entries: [zenith, horizon, belowHorizon] — the horizon stop
 	// sits at dir.Y == 0.
 	Sky [3][]float64 `json:"sky,omitempty"`
+	// SkyMap is a richer alternative to Sky: arbitrary piecewise stops
+	// keyed by dir.Y (see SkyStop). Takes precedence over Sky when set.
+	SkyMap []SkyStop `json:"skyMap,omitempty"`
 	// Fog blends distant surfaces toward Fog.Color with height falloff
 	// (POV fog_type 2 style): fully dense below Altitude, falling off
 	// exponentially above with scale Offset.
@@ -118,6 +129,11 @@ type Fog struct {
 	Altitude float64   `json:"altitude,omitempty"` // dense below this height
 	Offset   float64   `json:"offset,omitempty"`   // falloff scale above Altitude (0 = hard cutoff)
 	MaxFog   float64   `json:"maxFog,omitempty"`   // blend cap, 0..1 (POV rgbt transparency)
+	// Profile "atan" enables the POV-Ray fog_type 2 density function
+	// exactly: density = 1/(u^2+1) with u = (y-offset)/alt (0 above
+	// ground level), whose ray integral is the atan difference below.
+	// "exp" (default) is the height-exponential profile described above.
+	Profile string `json:"profile,omitempty"`
 }
 
 // RenderOpts controls output.

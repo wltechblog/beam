@@ -194,7 +194,7 @@ func TestRenderGlassTransmits(t *testing.T) {
 	s.Environment = &scene.Environment{
 		Color:   []float64{0.1, 0.4, 0.9},
 		Ambient: 0.2,
-		Sky:     [2][]float64{{0.1, 0.4, 0.9}, {0.1, 0.4, 0.9}},
+		Sky:     [3][]float64{{0.1, 0.4, 0.9}, {0.1, 0.4, 0.9}, nil},
 	}
 	s.Materials["glass"] = &scene.Material{Type: "glass", Color: []float64{1, 1, 1}, IOR: 1.5}
 	s.Objects = []scene.Object{

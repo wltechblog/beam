@@ -37,6 +37,7 @@ type World struct {
 	// over the 2/3-stop Sky when non-empty.
 	SkyStops []SkyStop
 	Ambient     float64
+	AmbientColor geom.Vec3
 	Lights      []LightDef
 	Fog         *FogDef
 }
@@ -81,6 +82,7 @@ type CompiledMaterial struct {
 	Pattern   *scene.Pattern // nil = solid albedo
 	Roughness float64
 	IOR       float64
+	Reflectivity float64 // glass Fresnel base override (0 = pure Schlick)
 	Power     float64
 }
 
@@ -123,6 +125,7 @@ func compileMaterial(m *scene.Material) CompiledMaterial {
 	case "glass":
 		cm.Kind = 'g'
 		cm.IOR = m.IOR
+		cm.Reflectivity = m.Reflectivity
 		if cm.IOR == 0 {
 			cm.IOR = 1.5
 		}

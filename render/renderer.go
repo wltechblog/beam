@@ -283,7 +283,7 @@ func (r *Renderer) shade(ray geom.Ray, hit *geom.Hit, obj *Object3D, depth int, 
 	}
 
 	// matte: ambient + direct light with shadows
-	out := mulV(albedo, r.World.EnvColor).MulS(r.World.Ambient)
+	out := mulV(albedo, r.World.AmbientColor).MulS(r.World.Ambient)
 	for i := range r.World.Lights {
 		l := &r.World.Lights[i]
 		ld, dist := lightDir(l, p)
@@ -324,6 +324,9 @@ func (r *Renderer) glass(ray geom.Ray, hit *geom.Hit, mat *CompiledMaterial, dep
 	// Fresnel (Schlick)
 	r0 := (etaI - etaT) / (etaI + etaT)
 	r0 *= r0
+	if mat.Reflectivity > r0 {
+		r0 = mat.Reflectivity // POV-style reflection {min, max fresnel}
+	}
 	fr := r0 + (1-r0)*math.Pow(1-cosI, 5)
 
 	rd := reflectDir(ray.Dir, n)

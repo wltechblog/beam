@@ -43,6 +43,8 @@ type Material struct {
 	Color     []float64 `json:"color,omitempty"`
 	Pattern   *Pattern  `json:"pattern,omitempty"` // overrides Color for albedo
 	Roughness float64   `json:"roughness,omitempty"`
+	// Reflectivity raises glass Fresnel base (POV reflection {min,max fresnel})
+	Reflectivity float64 `json:"reflectivity,omitempty"`
 	IOR       float64   `json:"ior,omitempty"`   // glass index of refraction
 	Power     float64   `json:"power,omitempty"` // emissive multiplier
 }
@@ -101,6 +103,8 @@ type SkyStop struct {
 type Environment struct {
 	Color   []float64 `json:"color"`
 	Ambient float64   `json:"ambient,omitempty"`
+	// AmbientColor overrides the ambient tint (default = color)
+	AmbientColor []float64 `json:"ambientColor,omitempty"`
 	// Sky is an optional gradient sampled by miss rays, giving glass and
 	// metal something believable to show. Two entries: [zenith, bottom].
 	// Three entries: [zenith, horizon, belowHorizon] — the horizon stop

@@ -56,12 +56,12 @@ MATERIALS = {
                      "colors": [[0.55, 0.52, 0.50], [0.42, 0.40, 0.39]]},
     },
     "stone2": {  # Stone_Tex2 for basin/texts
-        "type": "matte", "color": [0.50, 0.48, 0.46],
+        "type": "matte", "color": [0.52, 0.44, 0.38],
     },
     "water": {  # M_Watx4: reflection 0.1-0.95 fresnel, ior 1.31, green fade
         # POV fades to green with DEPTH (fade_distance 0.8); glass tints per
         # interface instead, so use a much lighter tint to net a similar look
-        "type": "glass", "color": [0.65, 0.88, 0.65], "ior": 1.31,
+        "type": "glass", "color": [0.65, 0.88, 0.65], "ior": 1.31, "reflectivity": 0.1,
     },
     "metal": {  # Metal_Texture: copper-ish metallic reflection 0.8
         "type": "metal", "color": [0.65, 0.55, 0.5], "roughness": 0.01,
@@ -551,7 +551,7 @@ def build_scene():
         },
         "environment": {
             "color": [0.62, 0.66, 0.78],
-            "ambient": 0.38,
+            "ambient": 0.38, "ambientColor": [0.55, 0.50, 0.42],
             # 3-stop sky: [zenith, horizon, below-horizon]. Stops solved by
             # inverting POV reference pixels through exposure 2.6 + Reinhard
             # (POV's display gamma brightens its declared values considerably:
@@ -595,7 +595,7 @@ def build_scene():
                 "dir": [-sun_dir_pov[0], -sun_dir_pov[2], sun_dir_pov[1]],
                 # Empirically calibrated (raw POV 3.43/2.87/1.95 is too dark for
                 # Beam: POV's radiosity + media-attenuated sun ≈ our brighter direct)
-                "color": [6.0, 5.0, 3.4],
+                "color": [5.2, 4.4, 3.0],
             },
             {
                 "type": "directional",

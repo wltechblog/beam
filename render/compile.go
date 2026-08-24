@@ -14,8 +14,12 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 		EnvColor: rgb(envColor(s)),
 		Ambient:  0.2,
 	}
+	w.AmbientColor = w.EnvColor
 	if s.Environment != nil && s.Environment.Ambient > 0 {
 		w.Ambient = s.Environment.Ambient
+	}
+	if s.Environment != nil && len(s.Environment.AmbientColor) == 3 {
+		w.AmbientColor = rgb(s.Environment.AmbientColor)
 	}
 	if s.Environment != nil && len(s.Environment.SkyMap) >= 2 {
 		for _, st := range s.Environment.SkyMap {

@@ -3,3 +3,6 @@
 *.png
 !docs/*.png
 *.py
+pov-benchmark/obj-*.obj
+pov-benchmark/beam-benchmark.json
+pov-benchmark/*.png

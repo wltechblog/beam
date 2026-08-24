@@ -2,18 +2,22 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/wltechblog/beam/render"
+	"github.com/wltechblog/beam/scene"
 )
 
 func main() {
 	preview := flag.Bool("preview", false, "fast low-res render (320px, 1 sample)")
 	quiet := flag.Bool("q", false, "suppress progress output")
 	out := flag.String("o", "", "output path override (default: <scene>.png)")
+	fit := flag.Bool("fit", false, "pre-render fit check: project object bounds to screen, report clipping, exit 2 if anything clips")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: beam [options] scene.json\n\noptions:\n")
 		flag.PrintDefaults()
@@ -22,6 +26,10 @@ func main() {
 	if flag.NArg() != 1 {
 		flag.Usage()
 		os.Exit(2)
+	}
+
+	if *fit {
+		os.Exit(runFitCheck(flag.Arg(0), *out != ""))
 	}
 
 	start := time.Now()
@@ -36,3 +44,36 @@ func main() {
 	}
 	fmt.Printf("%s (%.1fs)\n", path, time.Since(start).Seconds())
 }
+
+// runFitCheck loads the scene, projects every object's bounds to screen
+// space, and prints a JSON report. Exit codes: 0 = fits, 2 = clipping,
+// 1 = scene failed to load/compile.
+func runFitCheck(path string, quiet bool) int {
+	s, err := scene.Load(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "beam:", err)
+		return 1
+	}
+	dir := filepath.Dir(path)
+	width, height := s.Render.Width, s.Render.Height
+	if width == 0 {
+		width = 800
+	}
+	if height == 0 {
+		height = 600
+	}
+	report, err := render.ScreenFitCheck(s, render.NewFileResolver(dir), width, height)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "beam:", err)
+		return 1
+	}
+	if !quiet {
+		b, _ := json.MarshalIndent(report, "", "  ")
+		fmt.Println(string(b))
+	}
+	if !report.Fitted {
+		os.Exit(2)
+	}
+	return 0
+}
+

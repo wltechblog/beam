@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "camera": {
+    "pos": [
+      0,
+      1.15,
+      -5.9
+    ],
+    "lookAt": [
+      0,
+      0.6,
+      0
+    ],
+    "fov": 45
+  },
+  "environment": {
+    "color": [
+      0.05,
+      0.07,
+      0.12
+    ],
+    "ambient": 0.15,
+    "sky": [
+      [
+        0.25,
+        0.45,
+        0.75
+      ],
+      [
+        0.75,
+        0.65,
+        0.55
+      ]
+    ]
+  },
+  "materials": {
+    "floor": {
+      "type": "matte",
+      "pattern": {
+        "type": "checker",
+        "colors": [
+          [
+            0.25,
+            0.25,
+            0.3
+          ],
+          [
+            0.7,
+            0.7,
+            0.75
+          ]
+        ],
+        "scale": 1.0
+      }
+    },
+    "ball": {
+      "type": "metal",
+      "color": [
+        0.95,
+        0.65,
+        0.15
+      ],
+      "roughness": 0.02
+    },
+    "glass": {
+      "type": "glass",
+      "color": [
+        0.9,
+        0.95,
+        1.0
+      ],
+      "ior": 1.5
+    },
+    "word": {
+      "type": "matte",
+      "color": [
+        0.95,
+        0.3,
+        0.25
+      ]
+    }
+  },
+  "objects": [
+    {
+      "type": "plane",
+      "material": "floor",
+      "point": [
+        0,
+        0,
+        0
+      ],
+      "normal": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "sphere",
+      "material": "ball",
+      "center": [
+        -1.6,
+        0.7,
+        0.5
+      ],
+      "radius": 0.7
+    },
+    {
+      "type": "sphere",
+      "material": "glass",
+      "center": [
+        1.6,
+        0.6,
+        0.8
+      ],
+      "radius": 0.6
+    },
+    {
+      "type": "text",
+      "material": "word",
+      "text": "BEAM",
+      "size": 0.85,
+      "depth": 0.25,
+      "font": "bold",
+      "transform": {
+        "translate": [
+          0.05,
+          0.02,
+          -0.5
+        ]
+      }
+    }
+  ],
+  "lights": [
+    {
+      "type": "point",
+      "pos": [
+        4,
+        6,
+        -4
+      ],
+      "intensity": 60
+    },
+    {
+      "type": "point",
+      "pos": [
+        -5,
+        4,
+        -3
+      ],
+      "color": [
+        0.6,
+        0.7,
+        1.0
+      ],
+      "intensity": 30
+    }
+  ],
+  "render": {
+    "width": 1920,
+    "height": 1080,
+    "samples": 4,
+    "maxDepth": 6,
+    "output": "beam-1080p.png"
+  }
+}

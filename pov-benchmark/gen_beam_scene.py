@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate Beam scene JSON from the POV-Ray benchmark (benchmark.pov v2.03).
 
-Coordinate system: POV is Z-up; Beam is Y-up. Map (x, y, z)_pov -> (x, -z, y)_beam.
+Coordinate system: POV is Z-up LEFT-handed; Beam is Y-up right-handed. Map (x, y, z)_pov -> (-x, z, -y)_beam (improper, mirror).
 
 Ported elements:
 - camera (location/look_at/angle 45)
@@ -26,12 +26,21 @@ import random
 
 
 def p2b(v):
-    """POV Z-up -> Beam Y-up: (x, y, z)_pov -> (x, z, -y)_beam.
+    """POV (left-handed, Z-up) -> Beam (right-handed, Y-up).
 
-    POV +z (up) maps to beam +y (up); POV +y maps to beam -z.
-    Right-handed -> right-handed (rotation about X by -90 degrees).
+    Map (x, y, z)_pov -> (-x, z, -y)_beam. This is an IMPROPER transform
+    (det = -1): POV-Ray uses a left-handed coordinate system, so converting
+    to a right-handed renderer requires one reflection to preserve the
+    rendered image orientation. A proper rotation like (x, z, -y) mirrors
+    the whole scene on screen. det = -1 also inverts triangle winding,
+    fixed by swap_winding() at every write_obj call.
     """
-    return [v[0], v[2], -v[1]]
+    return [-v[0], v[2], -v[1]]
+
+
+def swap_winding(tris):
+    """Invert triangle winding to match the mirrored (improper) p2b map."""
+    return [(a, c, b) for (a, b, c) in tris]
 
 
 def p2b_box(lo, hi):
@@ -392,7 +401,7 @@ def build_scene():
             [("scale", (s, s, s)), ("translate", POV_POSITIONS[name])],
         )
         fname = f"obj-socket-{name}.obj"
-        write_obj(fname, [p2b(v) for v in verts], sock_tris)
+        write_obj(fname, [p2b(v) for v in verts], swap_winding(sock_tris))
         objects.append({
             "type": "mesh",
             "src": fname,
@@ -499,7 +508,7 @@ def build_scene():
         ],
     )
     fname = "obj-fn4.obj"
-    write_obj(fname, [p2b(v) for v in fn_verts], fn_tris)
+    write_obj(fname, [p2b(v) for v in fn_verts], swap_winding(fn_tris))
     objects.append({
         "type": "mesh",
         "src": fname,
@@ -515,7 +524,7 @@ def build_scene():
         [("scale", (1.9, 1.9, 2.8)), ("translate", POV_POSITIONS["Pos5"])],
     )
     fname = "obj-tower.obj"
-    write_obj(fname, [p2b(v) for v in tw_verts], tw_tris)
+    write_obj(fname, [p2b(v) for v in tw_verts], swap_winding(tw_tris))
     objects.append({
         "type": "mesh",
         "src": fname,
@@ -533,7 +542,7 @@ def build_scene():
         ],
     )
     fname = "obj-mountain.obj"
-    write_obj(fname, [p2b(v) for v in m_verts], m_tris)
+    write_obj(fname, [p2b(v) for v in m_verts], swap_winding(m_tris))
     objects.append({
         "type": "mesh",
         "src": fname,
@@ -592,7 +601,7 @@ def build_scene():
             {
                 "type": "directional",
                 # POV light at sun_pos*150000 shines toward origin: travel dir = -pos
-                "dir": [-sun_dir_pov[0], -sun_dir_pov[2], sun_dir_pov[1]],
+                "dir": p2b([-sun_dir_pov[0], -sun_dir_pov[1], -sun_dir_pov[2]]),
                 # Empirically calibrated (raw POV 3.43/2.87/1.95 is too dark for
                 # Beam: POV's radiosity + media-attenuated sun ≈ our brighter direct)
                 "color": [5.2, 4.4, 3.0],

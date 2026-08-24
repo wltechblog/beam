@@ -158,8 +158,8 @@ func (s *Scene) ApplyDefaults() {
 
 // ValidationErr is one schema error with a JSON-pointer-ish path.
 type ValidationErr struct {
-	Path string
-	Msg  string
+	Path string `json:"path"`
+	Msg  string `json:"msg"`
 }
 
 func (e *ValidationErr) Error() string { return fmt.Sprintf("%s: %s", e.Path, e.Msg) }

@@ -22,6 +22,13 @@ func Load(path string) (*Scene, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read scene: %w", err)
 	}
+	return Parse(raw)
+}
+
+// Parse decodes, validates, and defaults scene JSON in memory. This is the
+// entry point used by the MCP server, where scenes arrive as text rather
+// than files.
+func Parse(raw []byte) (*Scene, error) {
 	var s Scene
 	if err := json.Unmarshal(raw, &s); err != nil {
 		return nil, fmt.Errorf("parse scene JSON: %w", err)

@@ -11,6 +11,8 @@ import (
 	_ "embed"
 	"fmt"
 	"image"
+	"os"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -257,6 +259,47 @@ func flatten(w *render.World) (bufs sceneArrays) {
 	return bufs
 }
 
+// Diagnostic runs the common no-device failure checks and returns a
+// human-readable explanation of why the GPU is unusable.
+func Diagnostic() string {
+	_, err := ProbeDevices()
+	if err == nil {
+		return "GPU OK"
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("GPU unavailable: %v. ", err))
+	if _, serr := os.Stat("/dev/dri"); serr != nil {
+		b.WriteString("/dev/dri is not mounted in this container. " +
+			"Add `devices: [/dev/dri:/dev/dri]` to the container config.")
+		return b.String()
+	}
+	b.WriteString("/dev/dri exists. Checking device access:\n")
+	entries, _ := os.ReadDir("/dev/dri")
+	any := false
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasPrefix(name, "renderD") && !strings.HasPrefix(name, "card") {
+			continue
+		}
+		any = true
+		path := "/dev/dri/" + name
+		f, oerr := os.OpenFile(path, os.O_RDWR, 0)
+		if oerr == nil {
+			f.Close()
+			b.WriteString(fmt.Sprintf("  %s: accessible\n", path))
+		} else {
+			b.WriteString(fmt.Sprintf("  %s: %v\n", path, oerr))
+		}
+	}
+	if !any {
+		b.WriteString("  /dev/dri contains no renderD*/card* nodes.")
+	}
+	b.WriteString("If access is denied: device nodes are root:video/root:render mode 660; " +
+		"run `sudo chmod 666 /dev/dri/*` or add `group_add: [\"44\",\"109\"]` to the container config. " +
+		"If /dev/dri is absent entirely, the container needs the /dev/dri device mapping.")
+	return b.String()
+}
+
 func max(a, b int) int {
 	if a > b {
 		return a
@@ -272,7 +315,7 @@ func RenderGPU(w *render.World, cam *render.Camera, width, height, samples, maxD
 
 	devs, err := ProbeDevices()
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("%w\n%s", err, Diagnostic())
 	}
 	var dev Device
 	for _, d := range devs {
@@ -438,5 +481,3 @@ func boolInt(b bool) int32 {
 	}
 	return 0
 }
-
-

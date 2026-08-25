@@ -98,17 +98,18 @@ func RenderScene(s *scene.Scene, opts Options) (string, error) {
 
 	start := time.Now()
 	var img *image.RGBA
-	if opts.GPU && GPUHook != nil {
+	if opts.GPU {
+		if GPUHook == nil {
+			return "", fmt.Errorf("gpu render requested but no GPU hook is registered " +
+				"(the gpu package was not linked into this binary)")
+		}
 		var gpuDT time.Duration
 		img, gpuDT, err = GPUHook(world, cam, width, height, samples,
 			r.MaxDepth, r.Exposure, r.ClipTonemap, r.Seed)
 		if err != nil {
-			// GPU failed — plain CPU fallback keeps the render alive
-			if !opts.Quiet {
-				fmt.Fprintf(os.Stderr, "gpu render failed (%v), falling back to cpu\n", err)
-			}
-			img = nil
-		} else if !opts.Quiet {
+			return "", fmt.Errorf("gpu render failed: %w", err)
+		}
+		if !opts.Quiet {
 			fmt.Fprintf(os.Stderr, "gpu kernel %s\n", gpuDT.Round(time.Millisecond))
 		}
 	}

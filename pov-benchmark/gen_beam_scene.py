@@ -319,6 +319,176 @@ def mountain_mesh(n=160):
     return verts, tris
 
 
+# ------------------------------------------------------------------ Pos2 real shapes
+
+def pov_rand_seq(seed=45):
+    """Exact POV-Ray LCG: next = next*1812433253 + 12345 (mod 2^32).
+    Verified against povray-src/source/core/math/randomsequence.cpp
+    POV_rand(): seed(45) -> next_rand=45, rand() advances then divides."""
+    n = seed
+    def rand():
+        nonlocal n
+        n = (n * 1812433253 + 12345) & 0xFFFFFFFF
+        return n / 0xFFFFFFFF
+    return rand
+
+
+def julia_field(x, y, z, c, max_iter=7, exit_value=4.0):
+    """Quaternion julia field for surface extraction. POV semantics
+    (quaternion.cpp JuliaFractalRules::Iterate): w=0 slice, z^2+c,
+    escape when d+x2 > 4.0. Field: -1 inside, else +i/max_iter
+    (iteration count to escape as smooth-outside proxy)."""
+    w = 0.0
+    for i in range(1, max_iter + 1):
+        d = y * y + z * z + w * w
+        x2 = x * x
+        if d + x2 > exit_value:
+            return i / max_iter
+        xn = x2 - d + c[0]
+        yn = 2.0 * x * y + c[1]
+        zn = 2.0 * x * z + c[2]
+        wn = 2.0 * x * w + c[3]
+        x, y, z, w = xn, yn, zn, wn
+    return -1.0
+
+
+def superellipsoid_mesh(e, n, nlat=32, nlon=64):
+    """Parametric superellipsoid matching POV's <e,n> implicit
+    (|x|^(2/e)+|y|^(2/e))^(e/n)+|z|^(2/n)=1, unit extents (POV declares
+    superellipsoid { <e,n> } as <-1,-1,-1>..<1,1,1>).
+
+    Param: u = polar [0,pi], v = azimuth [0,2pi]:
+      z = sign(cos u)|cos u|^n
+      f(u) = |sin u|^n            (so (sum)^(e/n) = sin^2 u, |z|^(2/n)=cos^2 u)
+      x = f * sign(cos v)|cos v|^e,  y = f * sign(sin v)|sin v|^e
+    Returns (verts, tris) CCW seen from outside (u-major grid)."""
+    verts = []
+    for i in range(nlat + 1):
+        u = math.pi * i / nlat
+        fu = (abs(math.sin(u))) ** n
+        z = _sgn(math.cos(u)) * (abs(math.cos(u))) ** n
+        for j in range(nlon + 1):
+            v = 2 * math.pi * j / nlon
+            x = fu * _sgn(math.cos(v)) * (abs(math.cos(v))) ** e
+            y = fu * _sgn(math.sin(v)) * (abs(math.sin(v))) ** e
+            verts.append((x, y, z))
+    tris = []
+    def idx(i, j):
+        return i * (nlon + 1) + j
+    for i in range(nlat):
+        for j in range(nlon):
+            a, b, c_, d = idx(i, j), idx(i, j + 1), idx(i + 1, j + 1), idx(i + 1, j)
+            # CCW seen from outside: (a, d, c_) / (a, c_, b) — the natural
+            # (i,j)->(i,j+1)->(i+1,j+1) order faces INWARD for u=polar/v=azimuth
+            tris.append((a, c_, b))
+            tris.append((a, d, c_))
+    return verts, tris
+
+
+def _sgn(v):
+    return 1.0 if v > 0 else (-1.0 if v < 0 else 0.0)
+
+
+def surface_nets(field_fn, lo, hi, res=44):
+    """Naive dual-contouring (surface nets): vertex per sign-crossing cell at
+    the mean of crossing-edge midpoints, quad per sign-crossing grid edge
+    connecting the 4 adjacent cell vertices. No lookup tables, closed
+    manifold-ish output. Winding fixed by centroid heuristic."""
+    step = tuple((hi[k] - lo[k]) / res for k in range(3))
+    # sample grid (res+1)^3
+    F = [[[0.0] * (res + 1) for _ in range(res + 1)] for _ in range(res + 1)]
+    P = [[[None] * res for _ in range(res)] for _ in range(res)]  # cell verts
+    for i in range(res + 1):
+        x = lo[0] + step[0] * i
+        for j in range(res + 1):
+            y = lo[1] + step[1] * j
+            for k in range(res + 1):
+                z = lo[2] + step[2] * k
+                F[i][j][k] = field_fn(x, y, z)
+    # cell vertices at mean of crossing-edge midpoints
+    verts = []
+    for i in range(res):
+        for j in range(res):
+            for k in range(res):
+                # corners of cell (i,j,k)
+                cs = (F[i][j][k], F[i+1][j][k], F[i][j+1][k], F[i+1][j+1][k],
+                      F[i][j][k+1], F[i+1][j][k+1], F[i][j+1][k+1], F[i+1][j+1][k+1])
+                if all(s <= 0 for s in cs) or all(s > 0 for s in cs):
+                    continue
+                pts = []
+                # 12 edges of the cube (corner indices)
+                edges = ((0,1),(0,2),(4,6),(5,7),(0,4),(1,5),(2,3),(6,7),(2,6),(3,7),(1,3),(4,5))
+                for a, b in edges:
+                    if (cs[a] <= 0) != (cs[b] <= 0):
+                        pa = (lo[0]+step[0]*(i+(1 if a&1 else 0)), lo[1]+step[1]*(j+(1 if a>>1 else 0)), lo[2]+step[2]*(k+(1 if a>>2 else 0)))
+                        pb = (lo[0]+step[0]*(i+(1 if b&1 else 0)), lo[1]+step[1]*(j+(1 if b>>1 else 0)), lo[2]+step[2]*(k+(1 if b>>2 else 0)))
+                        # linear interpolation on field value
+                        t = cs[a] / (cs[a] - cs[b]) if cs[a] != cs[b] else 0.5
+                        pts.append(tuple(pa[m] + (pb[m]-pa[m]) * t for m in range(3)))
+                if not pts:
+                    continue
+                cx = sum(p[0] for p in pts)/len(pts); cy = sum(p[1] for p in pts)/len(pts); cz = sum(p[2] for p in pts)/len(pts)
+                P[i][j][k] = len(verts)
+                verts.append((cx, cy, cz))
+    # quads: for each grid edge with sign change, join 4 adjacent cells
+    tris = []
+    cx = sum(v[0] for v in verts)/max(1,len(verts))
+    cy = sum(v[1] for v in verts)/max(1,len(verts))
+    cz = sum(v[2] for v in verts)/max(1,len(verts))
+    def quad(a, b, c_, d):
+        if a is None or b is None or c_ is None or d is None:
+            return
+        # orient outward from centroid: full 3D cross product dotted with
+        # (face center - centroid), not a scrambled projection
+        va, vb, vc = verts[a], verts[b], verts[c_]
+        u = (vb[0]-va[0], vb[1]-va[1], vb[2]-va[2])
+        w = (vc[0]-va[0], vc[1]-va[1], vc[2]-va[2])
+        nx = u[1]*w[2] - u[2]*w[1]
+        ny = u[2]*w[0] - u[0]*w[2]
+        nz = u[0]*w[1] - u[1]*w[0]
+        mid = ((verts[a][0]+verts[c_][0])/2-cx, (verts[a][1]+verts[c_][1])/2-cy, (verts[a][2]+verts[c_][2])/2-cz)
+        if nx*mid[0] + ny*mid[1] + nz*mid[2] > 0:
+            tris.append((a, b, c_)); tris.append((a, c_, d))
+        else:
+            tris.append((a, c_, b)); tris.append((a, d, c_))
+    for i in range(res + 1):
+        for j in range(res + 1):
+            for k in range(res + 1):
+                # x-edge: cells (i,j-1,k-1),(i,j,k-1),(i,j-1,k),(i,j,k)
+                if 0 < j < res and 0 < k < res and i < res and (F[i][j][k] <= 0) != (F[i+1][j][k] <= 0):
+                    quad(P[i][j-1][k-1], P[i][j][k-1], P[i][j][k], P[i][j-1][k])
+                # y-edge
+                if 0 < i < res and 0 < k < res and j < res and (F[i][j][k] <= 0) != (F[i][j+1][k] <= 0):
+                    quad(P[i-1][j][k-1], P[i-1][j][k], P[i][j][k], P[i][j][k-1])
+                # z-edge
+                if 0 < i < res and 0 < j < res and k < res and (F[i][j][k] <= 0) != (F[i][j][k+1] <= 0):
+                    quad(P[i-1][j-1][k], P[i][j-1][k], P[i][j][k], P[i-1][j][k])
+    return verts, tris
+
+
+def julia_mesh(c, res=44):
+    """Quaternion julia fractal mesh, EXACT POV bounds/escape (fractal.cpp
+    Compute_BBox): R = min(2, 1+|c|) + tol, Exit_Value = R^2 + tol, set
+    contained in sphere |p| <= R. Worst |c| here ~0.77 -> R ~1.77."""
+    R = min(2.0, 1.0 + math.sqrt(c[0]*c[0] + c[1]*c[1] + c[2]*c[2] + c[3]*c[3]))
+    exit_value = R * R + 1e-8
+    return surface_nets(
+        lambda x, y, z: julia_field(x, y, z, c, max_iter=7, exit_value=exit_value),
+        (-R, -R, -R), (R, R, R), res=res,
+    )
+
+
+def bollard_mesh(noise_fn, res=40):
+    """Isosurface bollard at Pos1: f = max(sqrt(x^2+y^2)-0.25, z-0.7) - pigm*0.07.
+    POV contained_by box <-0.35,-0.35,0>,<0.35,0.35,0.8>; inside = f < 0.
+    pigm approximated by POV-style turbulence noise (mountain uses same)."""
+    def fld(x, y, z):
+        r = math.sqrt(x*x + y*y)
+        pigm = noise_fn(x, y, z)
+        return max(r - 0.25, z - 0.7) - pigm * 0.07
+    return surface_nets(fld, (-0.34, -0.34, -0.02), (0.34, 0.34, 0.74), res=res)
+
+
 def apply_pov_transforms(verts, ops):
     """Apply a list of POV transform ops to vertex list. Ops: ('scale', (sx,sy,sz)),
     ('rotz', deg), ('rotx', deg), ('translate', (tx,ty,tz))."""
@@ -445,22 +615,28 @@ def build_scene():
         "material": "glass",
     })
 
-    # ---- Pos1: metal ring (cylinder r=0.7 h=0.15 with hole) + orange isosurface
-    #      approximated as torus-like: use flattened sphere + orange blob sphere
+    # ---- Pos1: metal collar ring — POV difference { cylinder -0z..0.15z r0.7
+    #      minus cylinder r0.68 } translate 0.6z: annulus at world z 0.6-0.75.
+    #      Kept as flattened-sphere stand-in: r 0.7, y-scale 0.107 (thickness
+    #      2*0.7*0.107 = 0.15), center z = 0.675 = Pos1_z + 0.075.
     objects.append({
         "type": "sphere",
         "center": p2b((POV_POSITIONS["Pos1"][0], POV_POSITIONS["Pos1"][1],
                         POV_POSITIONS["Pos1"][2] + 0.075)),
         "radius": 0.7,
-        "transform": {"scale": [1.0, 0.214, 1.0]},
+        "transform": {"scale": [1.0, 0.107, 1.0]},
         "material": "metal",
     })
+    #      orange isosurface bollard: max(sqrt(x^2+y^2)-0.25, z-0.7) - pigm*0.07,
+    #      bozo-turbulence displaced cylinder, translated Pos1
+    _g = make_noise(707)
+    _noise = lambda x, y, z: noise2(g=_g, x=(x + 0.35) / 0.7 * 0.5, y=(y + 0.35) / 0.7 * 0.5)
+    _bv, _bt = bollard_mesh(_noise)
+    _bv = apply_pov_transforms(_bv, [("translate", POV_POSITIONS["Pos1"])])
+    write_obj("obj-bollard.obj", [p2b(v) for v in _bv], swap_winding(_bt))
     objects.append({
-        "type": "sphere",
-        "center": p2b((POV_POSITIONS["Pos1"][0], POV_POSITIONS["Pos1"][1],
-                        POV_POSITIONS["Pos1"][2] + 0.35)),
-        "radius": 0.35,
-        "transform": {"scale": [1.0, 0.8, 1.0]},
+        "type": "mesh",
+        "src": "obj-bollard.obj",
         "material": "flame",
     })
 
@@ -479,26 +655,40 @@ def build_scene():
         "material": "logo",
     })
 
-    # ---- Pos2: orbit ring of 12 small spheres (6 superellipsoids + 6 julias)
+    # ---- Pos2: orbit ring — 6 superellipsoids (metal) + 6 quaternion julia
+    #      fractals (pink), exact POV rand() sequence seed(45), transforms
+    #      baked per benchmark.pov: supers scale 0.12, T<0.6,0,0.12>, Rz(Cnt+30);
+    #      julias scale 0.12, T<0.6,0,0.1>, Rz(Cnt). Then union T(Pos2).
+    rand = pov_rand_seq(45)
     ox, oy, oz = POV_POSITIONS["Pos2"]
-    for cnt in range(0, 360, 60):
-        a = math.radians(cnt + 30)
-        r = 0.6
-        sx = ox + r * math.cos(a)
-        sy = oy + r * math.sin(a)
-        # superellipsoid (metal) and julia (pink) alternate at slight offsets
-        objects.append({
-            "type": "sphere",
-            "center": p2b((sx, sy, oz + 0.12)),
-            "radius": 0.12,
-            "material": "metal",
-        })
-        objects.append({
-            "type": "sphere",
-            "center": p2b((ox + r * math.cos(math.radians(cnt)), oy + r * math.sin(math.radians(cnt)), oz + 0.28)),
-            "radius": 0.10,
-            "material": "pink",
-        })
+    for i, cnt in enumerate(range(0, 360, 60)):
+        e = rand() * 2
+        n_exp = rand() * 2
+        cx = rand()
+        cy = rand() * 0.6
+        c = (cx, cy, -0.54, 0.2)
+
+        # superellipsoid (metal) at (Cnt+30) deg
+        sv, st = superellipsoid_mesh(e, n_exp)
+        sv = apply_pov_transforms(
+            sv,
+            [("scale", (0.12, 0.12, 0.12)), ("translate", (0.6, 0.0, 0.12)),
+             ("rotz", cnt + 30), ("translate", POV_POSITIONS["Pos2"])],
+        )
+        fname = f"obj-super-{i}.obj"
+        write_obj(fname, [p2b(v) for v in sv], swap_winding(st))
+        objects.append({"type": "mesh", "src": fname, "material": "metal"})
+
+        # julia fractal (pink) at Cnt deg
+        jv, jt = julia_mesh(c, res=40)
+        jv = apply_pov_transforms(
+            jv,
+            [("scale", (0.12, 0.12, 0.12)), ("translate", (0.6, 0.0, 0.1)),
+             ("rotz", cnt), ("translate", POV_POSITIONS["Pos2"])],
+        )
+        fname = f"obj-julia-{i}.obj"
+        write_obj(fname, [p2b(v) for v in jv], swap_winding(jt))
+        objects.append({"type": "mesh", "src": fname, "material": "pink"})
 
     # ---- Pos4: sine-displaced cylinder (scale 0.12)
     fn_verts, fn_tris = fn4_mesh()

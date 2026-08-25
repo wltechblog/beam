@@ -408,7 +408,13 @@ def build_scene():
             "material": "stone",
         })
 
-    # ---- texts on basin wall (scale 0.3, rot 90x, rot -90z)
+    # ---- texts on basin walls (ground-truthed 2026-08-24, probes/gt-beam)
+    # POV net chains conjugated through p2b (det -1):
+    #   POV_Text:     scale 0.3 -> Rx(90)Rz(-90), T(-1.97,0.995,0.575)
+    #     => beam rotY(+90), west wall (x=1.9), face +x, upright
+    #   Version_Text: scale 0.3 -> Rx(90)Rz(-90) then object rotZ(90) cancels
+    #     the Rz => net Rx(90) only: beam NO rotation, south wall, face -z
+    # anchor offsets tuned so centroids match POV reference within 0.02.
     objects.append({
         "type": "text",
         "text": "POV-Ray",
@@ -416,10 +422,8 @@ def build_scene():
         "depth": 0.075,
         "material": "stone2",
         "transform": {
-            # POV bakes rotate 90*x into the text declare -> beam rotX(-90) (conjugated)
-            # +depth lift: beam extrudes [0,-d], POV slab sits [0,+d] above baseline
-            "rotate": [-90, 0, 0],
-            "translate": p2b((-1.75, 0.995, 0.575)),
+            "rotate": [0, 90, 0],
+            "translate": [1.9, 0.575, -0.55],
         },
     })
     objects.append({
@@ -429,8 +433,7 @@ def build_scene():
         "depth": 0.075,
         "material": "stone2",
         "transform": {
-            "rotate": [-90, 0, 0],
-            "translate": p2b((-0.5, -1.5, 0.575)),
+            "translate": [-0.15, 0.575, 1.42],
         },
     })
 
@@ -461,20 +464,18 @@ def build_scene():
         "material": "flame",
     })
 
-    # ---- Pos1: POV logo (purple metallic) - sphere on cone silhouette approx
-    logo_scale = 0.4
-    lx, ly, lz = POV_POSITIONS["Pos1"]
+    # ---- Pos1: POV logo (logo.inc CSG: sphere + carved cone + carved
+    #      crescent), full object chain Rx(90) scale .4 T(0,-.2,0) Rz(-25)
+    #      T(0,0,.96) T(Pos1) baked — verified vs POV render (probes/)
+    import importlib.util as _ilu
+    _spec = _ilu.spec_from_file_location("logo_mesh", "probes/logo_mesh.py")
+    _lm = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_lm)
+    _lv, _lt = _lm.logo_final()
+    write_obj("obj-logo.obj", [p2b(v) for v in _lv], swap_winding(_lt))
     objects.append({
-        "type": "sphere",
-        "center": p2b((lx - 0.2, ly - 0.2, lz + 0.96 + 0.5 * logo_scale)),
-        "radius": 1.0 * logo_scale,
-        "material": "logo",
-    })
-    objects.append({
-        "type": "sphere",
-        "center": p2b((lx - 0.2 + 0.6 * logo_scale, ly - 0.2, lz + 0.96)),
-        "radius": 1.2 * logo_scale,
-        "transform": {"scale": [2.0, 1.0, 0.5], "rotate": [0, -30, 0]},
+        "type": "mesh",
+        "src": "obj-logo.obj",
         "material": "logo",
     })
 

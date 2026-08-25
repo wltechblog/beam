@@ -276,6 +276,7 @@ func Diagnostic() string {
 	b.WriteString("/dev/dri exists. Checking device access:\n")
 	entries, _ := os.ReadDir("/dev/dri")
 	any := false
+	allAccessible := true
 	for _, e := range entries {
 		name := e.Name()
 		if !strings.HasPrefix(name, "renderD") && !strings.HasPrefix(name, "card") {
@@ -288,15 +289,31 @@ func Diagnostic() string {
 			f.Close()
 			b.WriteString(fmt.Sprintf("  %s: accessible\n", path))
 		} else {
+			allAccessible = false
 			b.WriteString(fmt.Sprintf("  %s: %v\n", path, oerr))
 		}
 	}
 	if !any {
-		b.WriteString("  /dev/dri contains no renderD*/card* nodes.")
+		b.WriteString("  /dev/dri contains no renderD*/card* nodes. " +
+			"The container needs the host GPU devices; see the /dev/dri note below.")
+		return b.String()
 	}
-	b.WriteString("If access is denied: device nodes are root:video/root:render mode 660; " +
-		"run `sudo chmod 666 /dev/dri/*` or add `group_add: [\"44\",\"109\"]` to the container config. " +
-		"If /dev/dri is absent entirely, the container needs the /dev/dri device mapping.")
+	if !allAccessible {
+		b.WriteString("Device nodes are not accessible to this user. General fixes, most common first:\n" +
+			"  - ensure the runtime user is in the host's `video` and `render` groups " +
+			"(in containers, pass them through: e.g. docker-compose `group_add: [video, render]`, " +
+			"and make sure the group drop step — gosu/su-exec/setpriv — keeps supplementary groups)\n" +
+			"  - or run the container with `user: root`, or `privileged: true` (broadest, least secure)\n" +
+			"  - or, as a quick workaround: `chmod 666 /dev/dri/*` on the host " +
+			"(reverts on reboot / device re-enumeration)")
+		return b.String()
+	}
+	b.WriteString("All /dev/dri nodes are accessible, but no OpenCL platform was found. " +
+		"The GPU driver/runtime is missing or broken:\n" +
+		"  - install the vendor OpenCL runtime (e.g. Debian/Ubuntu: `apt install intel-opencl-icd`, " +
+		"AMD: `rocm-opencl-runtime`, NVIDIA: `nvidia-opencl-cuda-tools`)\n" +
+		"  - check that /etc/OpenCL/vendors/*.icd exists and points to an installed library\n" +
+		"  - verify with `clinfo`; OCL_ICD_VENDORS env var can override the vendor directory")
 	return b.String()
 }
 

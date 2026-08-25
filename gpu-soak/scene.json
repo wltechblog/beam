@@ -1,0 +1,2163 @@
+{
+ "version": 1,
+ "camera": {
+  "pos": [
+   0,
+   3.1,
+   -7.5
+  ],
+  "lookAt": [
+   0,
+   1.0,
+   3.0
+  ],
+  "fov": 50
+ },
+ "environment": {
+  "color": [
+   0.5,
+   0.65,
+   0.85
+  ],
+  "ambient": 0.12,
+  "ambientColor": [
+   1,
+   1,
+   1
+  ]
+ },
+ "lights": [
+  {
+   "type": "point",
+   "pos": [
+    -6,
+    9,
+    -4
+   ],
+   "color": [
+    1.0,
+    0.97,
+    0.9
+   ],
+   "intensity": 1.15,
+   "falloff": "none"
+  },
+  {
+   "type": "point",
+   "pos": [
+    7,
+    7,
+    6
+   ],
+   "color": [
+    0.85,
+    0.9,
+    1.0
+   ],
+   "intensity": 0.8,
+   "falloff": "none"
+  },
+  {
+   "type": "point",
+   "pos": [
+    0,
+    5,
+    -8
+   ],
+   "color": [
+    1.0,
+    0.95,
+    0.88
+   ],
+   "intensity": 0.5,
+   "falloff": "none"
+  }
+ ],
+ "materials": {
+  "floor": {
+   "type": "matte",
+   "color": [
+    0.35,
+    0.36,
+    0.38
+   ]
+  },
+  "red": {
+   "type": "matte",
+   "color": [
+    0.75,
+    0.2,
+    0.15
+   ]
+  },
+  "green": {
+   "type": "matte",
+   "color": [
+    0.15,
+    0.7,
+    0.25
+   ]
+  },
+  "blue": {
+   "type": "matte",
+   "color": [
+    0.15,
+    0.3,
+    0.75
+   ]
+  },
+  "white": {
+   "type": "matte",
+   "color": [
+    0.8,
+    0.8,
+    0.82
+   ]
+  },
+  "chrome": {
+   "type": "metal",
+   "color": [
+    0.92,
+    0.92,
+    0.95
+   ],
+   "roughness": 0.02
+  },
+  "gold": {
+   "type": "metal",
+   "color": [
+    0.95,
+    0.72,
+    0.3
+   ],
+   "roughness": 0.05
+  },
+  "glass": {
+   "type": "glass",
+   "color": [
+    0.9,
+    0.95,
+    1.0
+   ],
+   "ior": 1.5
+  },
+  "emit": {
+   "type": "emissive",
+   "color": [
+    0.4,
+    0.7,
+    1.0
+   ],
+   "power": 2.5
+  },
+  "knot": {
+   "type": "metal",
+   "color": [
+    0.7,
+    0.65,
+    0.6
+   ],
+   "roughness": 0.1,
+   "reflectivity": 0.4,
+   "metallic": false
+  }
+ },
+ "objects": [
+  {
+   "type": "plane",
+   "point": [
+    0,
+    0,
+    0
+   ],
+   "normal": [
+    0,
+    1,
+    0
+   ],
+   "material": "floor"
+  },
+  {
+   "type": "box",
+   "min": [
+    -14,
+    0.1,
+    16
+   ],
+   "max": [
+    14,
+    2.2,
+    16.6
+   ],
+   "material": "emit"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -9.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -8.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -7.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -6.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -5.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -4.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -3.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -2.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -1.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -0.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    0.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    1.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    2.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    3.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    4.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    5.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    6.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    7.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    8.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    9.5,
+    0.32,
+    -1.5
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -9.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -8.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -7.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -6.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -5.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -4.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -3.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -2.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -1.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -0.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    0.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    1.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    2.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    3.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    4.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    5.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    6.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    7.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    8.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    9.5,
+    0.32,
+    0.19999999999999996
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -9.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -8.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -7.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -6.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -5.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -4.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -3.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -2.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -1.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -0.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    0.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    1.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    2.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    3.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    4.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    5.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    6.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    7.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    8.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    9.5,
+    0.32,
+    1.9
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -9.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -8.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -7.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -6.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -5.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -4.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -3.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -2.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -1.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -0.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    0.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    1.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    2.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    3.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    4.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    5.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    6.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    7.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    8.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    9.5,
+    0.32,
+    3.5999999999999996
+   ],
+   "radius": 0.3,
+   "material": "white"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -9.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -8.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -7.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -6.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -5.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -4.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -3.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -2.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -1.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -0.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    0.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    1.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    2.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    3.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    4.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    5.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    6.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    7.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    8.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    9.5,
+    0.32,
+    5.3
+   ],
+   "radius": 0.3,
+   "material": "red"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -9.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -8.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -7.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -6.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -5.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -4.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -3.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -2.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -1.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -0.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    0.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    1.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    2.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    3.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    4.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    5.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    6.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    7.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    8.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    9.5,
+    0.32,
+    7.0
+   ],
+   "radius": 0.3,
+   "material": "green"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -9.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -8.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -7.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -6.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -5.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -4.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -3.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -2.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -1.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -0.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    0.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    1.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    2.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    3.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    4.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    5.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    6.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    7.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    8.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    9.5,
+    0.32,
+    8.7
+   ],
+   "radius": 0.3,
+   "material": "blue"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    -1.1,
+    0.75,
+    4.6
+   ],
+   "radius": 0.75,
+   "material": "chrome"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    0.0,
+    0.6,
+    5.6
+   ],
+   "radius": 0.6,
+   "material": "glass"
+  },
+  {
+   "type": "sphere",
+   "center": [
+    1.2,
+    0.55,
+    4.9
+   ],
+   "radius": 0.55,
+   "material": "gold"
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     0.0,
+     0.0
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     5.2,
+     1.35,
+     3.0
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     4.499999999999999,
+     29.999999999999996
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     4.503332099679081,
+     1.35,
+     5.6
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     8.999999999999998,
+     59.99999999999999
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     2.6000000000000005,
+     1.35,
+     7.50333209967908
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     13.5,
+     90.0
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     3.1840816777831187e-16,
+     1.35,
+     8.2
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     17.999999999999996,
+     119.99999999999999
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     -2.5999999999999988,
+     1.35,
+     7.503332099679081
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     22.5,
+     150.0
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     -4.503332099679081,
+     1.35,
+     5.6
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     27.0,
+     180.0
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     -5.2,
+     1.35,
+     3.0000000000000004
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     31.500000000000004,
+     210.00000000000003
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     -4.50333209967908,
+     1.35,
+     0.39999999999999947
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     35.99999999999999,
+     239.99999999999997
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     -2.6000000000000023,
+     1.35,
+     -1.5033320996790795
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     40.5,
+     270.0
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     -9.552245033349355e-16,
+     1.35,
+     -2.2
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     45.0,
+     300.0
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     2.6000000000000005,
+     1.35,
+     -1.5033320996790804
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     49.5,
+     330.0
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     4.5033320996790795,
+     1.35,
+     0.3999999999999977
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     2.2345354010102105,
+     14.896902673401405
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     7.151285838195398,
+     2.1,
+     4.902396084001948
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     6.73453540101021,
+     44.8969026734014
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     5.241997163600134,
+     2.1,
+     8.223166255903422
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     11.23453540101021,
+     74.8969026734014
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     1.9281195822919783,
+     2.1,
+     10.144393247602082
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     15.73453540101021,
+     104.8969026734014
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     -1.9023960840019476,
+     2.1,
+     10.151285838195399
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     20.23453540101021,
+     134.8969026734014
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     -5.223166255903421,
+     2.1,
+     8.241997163600134
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     24.734535401010213,
+     164.89690267340143
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     -7.144393247602082,
+     2.1,
+     4.928119582291975
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     29.23453540101021,
+     194.8969026734014
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     -7.151285838195399,
+     2.1,
+     1.0976039159980544
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     33.734535401010206,
+     224.8969026734014
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     -5.241997163600134,
+     2.1,
+     -2.223166255903421
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     38.234535401010206,
+     254.89690267340137
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     -1.9281195822919823,
+     2.1,
+     -4.14439324760208
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     42.734535401010206,
+     284.89690267340137
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     1.9023960840019452,
+     2.1,
+     -4.151285838195399
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     47.23453540101021,
+     314.8969026734014
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     5.22316625590342,
+     2.1,
+     -2.241997163600135
+    ]
+   }
+  },
+  {
+   "type": "mesh",
+   "src": "soak-knot.obj",
+   "material": "knot",
+   "transform": {
+    "rotate": [
+     0,
+     51.734535401010206,
+     344.89690267340137
+    ],
+    "scale": [
+     0.42,
+     0.42,
+     0.42
+    ],
+    "translate": [
+     7.14439324760208,
+     2.1,
+     1.0718804177080172
+    ]
+   }
+  }
+ ],
+ "render": {
+  "width": 1920,
+  "height": 1080,
+  "samples": 8,
+  "maxDepth": 12,
+  "seed": 45,
+  "exposure": 1.0,
+  "tonemap": "clip",
+  "output": "soak.png"
+ }
+}

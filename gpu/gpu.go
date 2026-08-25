@@ -378,6 +378,15 @@ func RenderGPU(w *render.World, cam *render.Camera, width, height, samples, maxD
 	}
 	defer ctx.Release()
 
+	// Device identity on stderr for every GPU render — makes "which silicon
+	// actually ran this" visible (CLI and MCP), so a CPU-side OpenCL device
+	// or a wrong-device selection can't masquerade as a GPU run.
+	prec := "fp32"
+	if double {
+		prec = "fp64"
+	}
+	fmt.Fprintf(os.Stderr, "gpu device: %s (%s)\n", dev.Name, prec)
+
 	opts := "-cl-std=CL1.2"
 	if double {
 		opts = "-cl-std=CL1.2 -D BEAM_DOUBLE=1"

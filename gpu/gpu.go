@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unsafe"
@@ -334,6 +335,31 @@ func RenderGPU(w *render.World, cam *render.Camera, width, height, samples, maxD
 	if err != nil {
 		return nil, 0, fmt.Errorf("%w\n%s", err, Diagnostic())
 	}
+	if sel := os.Getenv("BEAM_DEVICE"); sel != "" {
+		// Explicit device selection: numeric index into the ranked list,
+		// or a case-insensitive name substring match.
+		found := false
+		if idx, ierr := strconv.Atoi(sel); ierr == nil && idx >= 0 && idx < len(devs) {
+			devs = []Device{devs[idx]}
+			found = true
+		} else {
+			for _, d := range devs {
+				if strings.Contains(strings.ToLower(d.Name), strings.ToLower(sel)) {
+					devs = []Device{d}
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			names := make([]string, len(devs))
+			for i, d := range devs {
+				names[i] = d.Name
+			}
+			return nil, 0, fmt.Errorf("BEAM_DEVICE=%q matches no GPU device; available: %s",
+				sel, strings.Join(names, ", "))
+		}
+	}
 	var dev Device
 	for _, d := range devs {
 		if double && !HasFP64(d) {
@@ -391,13 +417,21 @@ func RenderGPU(w *render.World, cam *render.Camera, width, height, samples, maxD
 	}
 
 	i32 := func(idx int, v []int32) (*Buffer, error) {
+		if len(v) == 0 {
+			v = make([]int32, 1)
+		}
 		bb, e := ctx.CreateBufferRO(len(v)*4, unsafe.Pointer(&v[0]))
 		if e != nil {
 			return nil, e
 		}
 		return bb, ctx.SetArg(idx, bb)
 	}
+	// zero-length uploads are invalid in OpenCL — pad to one dummy element.
+	// Kernel reads nothing from them (associated counts are 0).
 	f64 := func(idx int, v []float64) (*Buffer, error) {
+		if len(v) == 0 {
+			v = make([]float64, 1)
+		}
 		if double {
 			bb, e := ctx.CreateBufferRO(len(v)*8, unsafe.Pointer(&v[0]))
 			if e != nil {
@@ -417,6 +451,9 @@ func RenderGPU(w *render.World, cam *render.Camera, width, height, samples, maxD
 		return bb, ctx.SetArg(idx, bb)
 	}
 	i64 := func(idx int, v []int64) (*Buffer, error) {
+		if len(v) == 0 {
+			v = make([]int64, 1)
+		}
 		bb, e := ctx.CreateBufferRO(len(v)*8, unsafe.Pointer(&v[0]))
 		if e != nil {
 			return nil, e

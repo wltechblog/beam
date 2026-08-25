@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "camera": {
+    "pos": [
+      0,
+      1.6,
+      -6.4
+    ],
+    "lookAt": [
+      0,
+      0.7,
+      0
+    ],
+    "fov": 45
+  },
+  "environment": {
+    "color": [
+      0.55,
+      0.7,
+      0.9
+    ],
+    "ambient": 0.1,
+    "ambientColor": [
+      1,
+      1,
+      1
+    ]
+  },
+  "lights": [
+    {
+      "type": "point",
+      "pos": [
+        -4,
+        6,
+        -3
+      ],
+      "color": [
+        0.45,
+        0.44,
+        0.41
+      ],
+      "intensity": 1,
+      "falloff": "none"
+    }
+  ],
+  "materials": {
+    "ball": {
+      "type": "metal",
+      "color": [
+        0.9,
+        0.3,
+        0.15
+      ],
+      "diffuse": 0.25,
+      "specular": 0.5,
+      "roughness": 0.02,
+      "reflectivity": 0.55,
+      "metallic": false
+    },
+    "glass": {
+      "type": "glass",
+      "color": [
+        0.95,
+        0.98,
+        1.0
+      ],
+      "ior": 1.5,
+      "reflectivity": 0.05
+    },
+    "floor": {
+      "type": "matte",
+      "color": [
+        0.72,
+        0.68,
+        0.62
+      ],
+      "diffuse": 0.8
+    }
+  },
+  "objects": [
+    {
+      "type": "plane",
+      "point": [
+        0,
+        0,
+        0
+      ],
+      "normal": [
+        0,
+        1,
+        0
+      ],
+      "material": "floor"
+    },
+    {
+      "type": "sphere",
+      "center": [
+        -1.1,
+        0.7,
+        0
+      ],
+      "radius": 0.7,
+      "material": "ball"
+    },
+    {
+      "type": "sphere",
+      "center": [
+        1.1,
+        0.7,
+        0
+      ],
+      "radius": 0.7,
+      "material": "glass"
+    }
+  ],
+  "render": {
+    "width": 320,
+    "height": 180,
+    "samples": 4,
+    "maxDepth": 4,
+    "seed": 7,
+    "exposure": 1.0,
+    "tonemap": "clip",
+    "output": "gpu-smoke.png"
+  }
+}

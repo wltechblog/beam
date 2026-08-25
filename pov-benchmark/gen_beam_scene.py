@@ -72,8 +72,10 @@ MATERIALS = {
         # interface instead, so use a much lighter tint to net a similar look
         "type": "glass", "color": [0.65, 0.88, 0.65], "ior": 1.31, "reflectivity": 0.1,
     },
-    "metal": {  # Metal_Texture: copper-ish metallic reflection 0.8
+    "metal": {  # Metal_Texture: metallic pigment <0.65,0.55,0.5>,
+        # diffuse 0.15, specular 0.3, roughness 0.01, reflection 0.8 metallic
         "type": "metal", "color": [0.65, 0.55, 0.5], "roughness": 0.01,
+        "diffuse": 0.15, "specular": 0.3, "reflectivity": 0.8, "metallic": True,
     },
     "glass": {  # Mat_Glass
         "type": "glass", "color": [0.9, 0.95, 0.98], "ior": 1.5,
@@ -84,8 +86,11 @@ MATERIALS = {
     "logo": {  # purple metallic logo
         "type": "metal", "color": [0.65, 0.55, 0.9], "roughness": 0.01,
     },
-    "pink": {  # julia fractals
+    "pink": {  # julia fractals: POV pigment <1,0.4,0.8>, diffuse 0.6,
+        # specular 0.2, reflection 0.2 (untinted -> chrome-ish sparkle)
         "type": "matte", "color": [1.0, 0.4, 0.8],
+        "diffuse": 0.6, "specular": 0.2,
+        "reflectivity": 0.2, "metallic": False,
     },
     "mountain": {  # heightfield bozo pigment
         "type": "matte", "color": [0.36, 0.36, 0.42],
@@ -100,77 +105,246 @@ MATERIALS = {
 
 # ------------------------------------------------------------------ socket pedestal mesh
 
-def socket_mesh(grooves=24, rings=10, height=5.0, top_z=-0.04, bot_z=-5.0,
-                r_outer=0.8, r_groove=0.72, r_hole=0.3):
-    """Fluted cylinder pedestal: outer wall with `grooves` vertical scallops,
-    hollow center (r_hole), top disc at z=-0.04 plus base ring.
 
-    POV Socket: cylinder(-5z, -0.04z, 0.8) minus cylinder(-6z, 0, 0.3) minus
-    24 rotated groove boxes, plus 12 rods on rim and a top disc cylinder
-    (-0.04z, 0, 0.86). We model: outer scalloped wall, inner hole wall, top
-    annulus, and bottom annulus, in POV z-up space. Returned mesh is in POV
-    coordinates (convert at placement).
+
+def socket_mesh(nseg=144, ncap=10):
+    """Real POV Socket (benchmark.pov 646): cylinder(-5z..-0.04z, r=0.8)
+    minus center hole cylinder(r=0.3) minus 12 rotated cutters (horizontal
+    cylinder r=0.1 at z=-0.24 + box below it) => 12 through-wall SLOTS with
+    rounded tops starting at z=-0.24. Union 12 rim rods (r=0.05 running
+    z=-5..-0.04 at r=0.8, offset 15deg, capped by r=0.07 stub z=-0.04..-0.01),
+    top disc cylinder(r=0.86, z=-0.04..0), torus collar (0.83, 0.03) at
+    z=-0.04. POV z-up space; convert with p2b as usual.
+
+    Explicit-surface construction (beam has no CSG at render time):
+      - outer wall, segmented: solid above slot tops; below slot top only
+        material in the angular gaps between cutters (slot windows open)
+      - slot ceilings: half-cylinder r=0.1 arcs closing each slot top
+      - inner hole wall, top annulus (r 0.3..0.8) + disc edge, bottom
+        annulus, rim rods with caps, top disc top, torus collar.
     """
     verts = []
     tris = []
 
-    def ring(z, radius_fn, n):
+    def quad(a, b, c, d):
+        tris.append([a, b, c]); tris.append([a, c, d])
+
+    R_OUT, R_HOLE, R_DISC = 0.8, 0.3, 0.86
+    Z_TOP, Z_BOT, Z_CUT = -0.04, -5.0, -0.24
+    SLOT_R = 0.1
+    N_CUT = 12
+
+    def cutter_k(x, y):
+        """Return cutter index whose footprint contains (x,y), else -1.
+        Cutter k: rotate point by -30k deg; footprint = dx in [0,1],
+        |dy| <= 0.1 (box) union circle centered (0.9? no: center on axis)
+        -> circle center (1.0, 0)? The horizontal cylinder runs 0->1 along
+        x at z=-0.24 with r=0.1: its top at z=-0.14. Footprint in xy is the
+        BOX |dy|<=0.1, 0<=dx<=1 (cylinder within box in projection)."""
+        for k in range(N_CUT):
+            ca = math.radians(30.0 * k)
+            dx = x * math.cos(ca) + y * math.sin(ca)
+            dy = -x * math.sin(ca) + y * math.cos(ca)
+            if 0.0 <= dx <= 1.0 and abs(dy) <= SLOT_R:
+                return k
+        return -1
+
+    # ---- outer wall --------------------------------------------------
+    # ring heights: top edge, slot top, slot bottom(cut), wall bottom
+    n = nseg
+    def outer_ring(z):
         base = len(verts)
         for i in range(n):
             ang = 2 * math.pi * i / n
-            r = radius_fn(ang)
-            verts.append((r * math.cos(ang), r * math.sin(ang), z))
+            verts.append((R_OUT * math.cos(ang), R_OUT * math.sin(ang), z))
         return base
 
-    def outer_r(ang):
-        # scallop: 24 grooves; groove floor near r_groove, flat r_outer
-        wave = math.cos(ang * grooves) * 0.5 + 0.5  # 0..1
-        return r_outer - (r_outer - r_groove) * (1.0 - wave)
+    r_top = outer_ring(Z_TOP)
+    r_cap = outer_ring(Z_CUT + SLOT_R)   # slot ceiling crest
+    r_cut = outer_ring(Z_CUT)
+    r_bot = outer_ring(Z_BOT)
 
-    n = 96
-    # outer wall rings from bottom to top
-    ring_ids = []
-    for k in range(rings + 1):
-        z = bot_z + (top_z - bot_z) * k / rings
-        ring_ids.append(ring(z, outer_r, n))
-    # connect outer wall (quads -> 2 tris), CCW seen from outside
-    for k in range(rings):
-        a0 = ring_ids[k]
-        a1 = ring_ids[k + 1]
-        for i in range(n):
-            j = (i + 1) % n
-            tris.append([a0 + i, a0 + j, a1 + j])
-            tris.append([a0 + i, a1 + j, a1 + i])
-    # inner hole wall (radius r_hole), normals flipped
-    ring_ids = []
-    for k in range(rings + 1):
-        z = bot_z + (top_z - bot_z) * k / rings
-        ring_ids.append(ring(z, lambda a: r_hole, n))
-    for k in range(rings):
-        a0 = ring_ids[k]
-        a1 = ring_ids[k + 1]
-        for i in range(n):
-            j = (i + 1) % n
-            tris.append([a0 + i, a1 + j, a0 + j])
-            tris.append([a0 + i, a1 + i, a1 + j])
-    # top annulus (z=top_z) between r_hole and scalloped outer; disc extends to 0.86
-    t_inner = ring(top_z, lambda a: r_hole, n)
-    t_outer = ring(top_z, outer_r, n)
+    def in_slot(ang):
+        return cutter_k(math.cos(ang), math.sin(ang)) >= 0
+
+    # wall bands:
     for i in range(n):
         j = (i + 1) % n
-        tris.append([t_inner + i, t_outer + j, t_inner + j])
-        tris.append([t_inner + i, t_outer + i, t_outer + j])
-    # bottom annulus (z=bot_z)
-    b_inner = ring(bot_z, lambda a: r_hole, n)
-    b_outer = ring(bot_z, outer_r, n)
+        ang_i = 2 * math.pi * i / n
+        s = in_slot(ang_i)
+        # top band [Z_TOP .. Z_CUT+SLOT_R]: always solid
+        quad(r_top + i, r_top + j, r_cap + j, r_cap + i)
+        # slot band [Z_CUT+SLOT_R .. Z_CUT]: only in gaps between slots
+        if not s:
+            quad(r_cap + i, r_cap + j, r_cut + j, r_cut + i)
+        # below band [Z_CUT .. Z_BOT]: only where NOT inside a slot
+        if not s:
+            quad(r_cut + i, r_cut + j, r_bot + j, r_bot + i)
+
+    # ---- slot ceilings (rounded tops) ---------------------------------
+    # half-cylinder arc from wall (r=0.8) inward, at each cutter angle,
+    # spanning the slot angular width; arc from z=Z_CUT+SLOT_R down to
+    # Z_CUT as radius goes 0.8 -> 0.8-0.1
+    for k in range(N_CUT):
+        ca = math.radians(30.0 * k)
+        half_w = math.asin(SLOT_R / R_OUT)   # angular half-width of slot
+        steps = max(4, int(half_w / (2 * math.pi) * n))
+        # left and right edge of slot (angular), walk ceiling arc
+        aL = ca - half_w; aR = ca + half_w
+        # rings of ceiling: outer at r=0.8 (already on wall), inner r=0.7
+        # ceiling surface: quad strip between (r=0.8, z=Z_CUT+SLOT_R) and
+        # (r=0.7, z=Z_CUT) following the cylinder silhouette
+        ncs = ncap
+        for s_i in range(ncs):
+            t0 = s_i / ncs
+            t1 = (s_i + 1) / ncs
+            # param t: 0 at left edge z=Z_CUT+SLOT_R crest, 1 at right;
+            # ceiling strip: from crest line down/right along arc
+            # build as fan of quads across slot width for this arc step
+            for w in range(steps):
+                w0 = w / steps; w1 = (w + 1) / steps
+                # two arc positions
+                a0 = aL + (aR - aL) * w0
+                a1 = aL + (aR - aL) * w1
+                # arc height at parameter across width (cylinder cap:
+                # z = Z_CUT + sqrt(SLOT_R^2 - (r*sin(theta))^2) approx)
+                def ceil_z(a):
+                    dy = abs(R_OUT * math.sin(a - ca))
+                    if dy >= SLOT_R:
+                        return Z_CUT + 1e-6
+                    return Z_CUT + math.sqrt(SLOT_R * SLOT_R - dy * dy)
+                # radial strip between wall radii at two angles
+                p00 = (R_OUT * math.cos(a0), R_OUT * math.sin(a0), ceil_z(a0))
+                p01 = (R_OUT * math.cos(a1), R_OUT * math.sin(a1), ceil_z(a1))
+                # strip down to slot bottom plane
+                p10 = (R_OUT * math.cos(a0), R_OUT * math.sin(a0), Z_COT if False else Z_CUT)
+                p11 = (R_OUT * math.cos(a1), R_OUT * math.sin(a1), Z_CUT)
+                i00 = len(verts); verts.append(p00)
+                i01 = len(verts); verts.append(p01)
+                i10 = len(verts); verts.append(p10)
+                i11 = len(verts); verts.append(p11)
+                quad(i00, i01, i11, i10)
+        # (this creates the visible rounded lip; radial depth omitted - the
+        #  slot reads as a recessed window with rounded top from outside)
+
+    # ---- inner hole wall ----------------------------------------------
+    def inner_ring(z):
+        base = len(verts)
+        for i in range(n):
+            ang = 2 * math.pi * i / n
+            verts.append((R_HOLE * math.cos(ang), R_HOLE * math.sin(ang), z))
+        return base
+
+    ir_top = inner_ring(Z_TOP)
+    ir_bot = inner_ring(Z_BOT)
     for i in range(n):
         j = (i + 1) % n
-        tris.append([b_inner + i, b_inner + j, b_outer + j])
-        tris.append([b_inner + i, b_outer + j, b_outer + i])
+        # winding: normal points toward hole axis? hole surface normal
+        # points INTO the hole (toward -r); from outside solid => we want
+        # normals facing the hole interior; verified by bbox later
+        quad(ir_bot + i, ir_bot + j, ir_top + j, ir_top + i)
+
+    # ---- top annulus r 0.3..0.8 at Z_TOP -------------------------------
+    for i in range(n):
+        j = (i + 1) % n
+        # outer ring at Z_TOP is r_top; inner is ir_top
+        quad(r_top + i, r_top + j, ir_top + j, ir_top + i)
+
+    # ---- top disc edge (r 0.8..0.86) and top face ----------------------
+    de_top = outer_ring.__doc__  # placeholder to keep locals tidy
+
+    # disc side wall r=0.86 from Z_TOP to 0
+    base = len(verts)
+    for i in range(n):
+        ang = 2 * math.pi * i / n
+        verts.append((R_DISC * math.cos(ang), R_DISC * math.sin(ang), Z_TOP))
+    d_bot = base
+    base = len(verts)
+    for i in range(n):
+        ang = 2 * math.pi * i / n
+        verts.append((R_DISC * math.cos(ang), R_DISC * sin(ang) if False else R_DISC * math.sin(ang), 0.0))
+    d_top = base
+    for i in range(n):
+        j = (i + 1) % n
+        quad(d_bot + i, d_bot + j, d_top + j, d_top + i)
+    # top face disc (fan)
+    c = len(verts); verts.append((0.0, 0.0, 0.0))
+    for i in range(n):
+        j = (i + 1) % n
+        tris.append([c, d_top + i, d_top + j])
+    # annulus between R_OUT and R_DISC at Z_TOP (visible collar shoulder)
+    for i in range(n):
+        j = (i + 1) % n
+        quad(r_top + j, r_top + i, d_bot + i, d_bot + j)
+
+    # ---- bottom annulus at Z_BOT --------------------------------------
+    for i in range(n):
+        j = (i + 1) % n
+        quad(r_bot + j, r_bot + i, ir_bot + i, ir_bot + j)
+
+    # ---- rim rods: 12, offset 15deg ------------------------------------
+    for k in range(N_CUT):
+        ca = math.radians(30.0 * k + 15.0)
+        cx, cy = R_OUT * math.cos(ca), R_OUT * math.sin(ca)
+        # rod r=0.05, z -5..-0.04; cap stub r=0.07, z -0.04..-0.01
+        nr = 10
+        for side in (-1, 1):
+            pass
+        def tube(cx, cy, r, z0, z1, nr, cap_top=False):
+            ringA = len(verts)
+            for i in range(nr):
+                ang = 2 * math.pi * i / nr
+                verts.append((cx + r * math.cos(ang), cy + r * math.sin(ang), z0))
+            ringB = len(verts)
+            for i in range(nr):
+                ang = 2 * math.pi * i / nr
+                verts.append((cx + r * math.cos(ang), cy + r * math.sin(ang), z1))
+            for i in range(nr):
+                j = (i + 1) % nr
+                quad(ringA + i, ringA + j, ringB + j, ringB + i)
+            if cap_top:
+                c0 = len(verts); verts.append((cx, cy, z1))
+                for i in range(nr):
+                    j = (i + 1) % nr
+                    tris.append([c0, ringB + i, ringB + j])
+        tube(cx, cy, 0.05, Z_BOT, Z_TOP, 10)
+        tube(cx, cy, 0.07, Z_TOP, -0.01, 10)
+        # cap top of stub (visible top at z=-0.01)
+        # re-emit ring at z=-0.01 and fan it
+        ringB = len(verts)
+        for i in range(10):
+            ang = 2 * math.pi * i / 10
+            verts.append((cx + 0.07 * math.cos(ang), cy + 0.07 * math.sin(ang), -0.01))
+        c0 = len(verts); verts.append((cx, cy, -0.01))
+        for i in range(10):
+            j = (i + 1) % 10
+            tris.append([c0, ringB + j, ringB + i])
+
+    # ---- torus collar (0.83, 0.03) at z=-0.04 ---------------------------
+    NT, NS = 96, 8
+    R_T, R_S = 0.83, 0.03
+    z0 = -0.04
+    prev = None
+    for t_i in range(NT + 1):
+        ta = 2 * math.pi * t_i / NT
+        ring = []
+        for s_i in range(NS):
+            sa = 2 * math.pi * s_i / NS
+            # torus in xy-plane (after rotate 90x, POV torus default axis z)
+            x = (R_T + R_S * math.cos(sa)) * math.cos(ta)
+            y = (R_T + R_S * math.cos(sa)) * math.sin(ta)
+            z = z0 + R_S * math.sin(sa)
+            ring.append(len(verts))
+            verts.append((x, y, z))
+        if prev is not None:
+            for s_i in range(NS):
+                s_j = (s_i + 1) % NS
+                quad(prev[s_i], prev[s_j], ring[s_j], ring[s_i])
+        prev = ring
+
     return verts, tris
 
 
-# ------------------------------------------------------------------ lathe tower (Pos5)
 
 def fnA(X):
     if X < 0.13:
@@ -282,6 +456,32 @@ def noise2(g, x, y):
     a = g[y0][x0] * (1 - sx) + g[y0][x1] * sx
     b = g[y1][x0] * (1 - sx) + g[y1][x1] * sx
     return a * (1 - sy) + b * sy
+
+
+def make_noise3(seed, n=8):
+    rng = random.Random(seed)
+    return [[[rng.random() for _ in range(n)] for _ in range(n)] for _ in range(n)]
+
+
+def noise3(g, x, y, z):
+    """Trilinear value noise over tiled n^3 grid, domain [0,1)^3."""
+    n = len(g)
+    fx, fy, fz = x * n, y * n, z * n
+    x0, y0, z0 = int(fx) % n, int(fy) % n, int(fz) % n
+    x1, y1, z1 = (x0 + 1) % n, (y0 + 1) % n, (z0 + 1) % n
+    tx, ty, tz = fx - math.floor(fx), fy - math.floor(fy), fz - math.floor(fz)
+    sx = tx * tx * (3 - 2 * tx)
+    sy = ty * ty * (3 - 2 * ty)
+    sz = tz * tz * (3 - 2 * tz)
+    def c(i, j, k):
+        return g[k][j][i]
+    c00 = c(x0, y0, z0) * (1 - sx) + c(x1, y0, z0) * sx
+    c10 = c(x0, y1, z0) * (1 - sx) + c(x1, y1, z0) * sx
+    c01 = c(x0, y0, z1) * (1 - sx) + c(x1, y0, z1) * sx
+    c11 = c(x0, y1, z1) * (1 - sx) + c(x1, y1, z1) * sx
+    c0 = c00 * (1 - sy) + c10 * sy
+    c1 = c01 * (1 - sy) + c11 * sy
+    return c0 * (1 - sz) + c1 * sz
 
 
 def mountain_mesh(n=160):
@@ -629,8 +829,18 @@ def build_scene():
     })
     #      orange isosurface bollard: max(sqrt(x^2+y^2)-0.25, z-0.7) - pigm*0.07,
     #      bozo-turbulence displaced cylinder, translated Pos1
-    _g = make_noise(707)
-    _noise = lambda x, y, z: noise2(g=_g, x=(x + 0.35) / 0.7 * 0.5, y=(y + 0.35) / 0.7 * 0.5)
+    # 3D fbm (x,y AND z): no-z noise = unbroken vertical ridges = spline
+    # shaft. POV bozo varies in 3D, so lumps must break up with height.
+    _gs3 = [make_noise3(707), make_noise3(1337)]
+    def _noise(x, y, z):
+        u = (x + 0.35) / 0.7
+        v = (y + 0.35) / 0.7
+        w = (z + 0.02) / 0.76
+        total = 0.0
+        for o, g in enumerate(_gs3):
+            f = 1.6 * (2 ** o)
+            total += (noise3(g, u * f, v * f, w * f) - 0.5) / (2 ** o)
+        return total + 0.5
     _bv, _bt = bollard_mesh(_noise)
     _bv = apply_pov_transforms(_bv, [("translate", POV_POSITIONS["Pos1"])])
     write_obj("obj-bollard.obj", [p2b(v) for v in _bv], swap_winding(_bt))

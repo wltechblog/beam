@@ -158,6 +158,10 @@ type RenderOpts struct {
 	Exposure float64 `json:"exposure,omitempty"`
 	Output   string  `json:"output,omitempty"`
 	Tonemap  string  `json:"tonemap,omitempty"` // "" | "reinhard" (default) | "clip" (POV-style)
+
+	// MaxSeconds aborts the render (no PNG written) if it runs longer.
+	// Guards against runaway scenes (huge sample counts, CPU fallbacks).
+	MaxSeconds float64 `json:"maxSeconds,omitempty"`
 }
 
 // Default material used when an object references a missing material.

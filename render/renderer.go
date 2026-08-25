@@ -1,11 +1,13 @@
 package render
 
 import (
+	"errors"
 	"image"
 	"image/color"
 	"math"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/wltechblog/beam/geom"
 )
@@ -25,7 +27,15 @@ type Renderer struct {
 	Exposure    float64
 	ClipTonemap bool // POV-style: clip instead of Reinhard
 	Seed        int64
+
+	// Deadline aborts the render mid-flight when non-nil. Workers check
+	// it between tiles (and between rows within a tile); the returned
+	// image is nil when aborted.
+	Deadline *time.Time
 }
+
+var errRenderDeadline = errors.New("render exceeded maxSeconds deadline — aborting " +
+	"(scene likely oversized for the available hardware; lower samples/resolution)")
 
 // Render produces the image using one worker goroutine per CPU. onTile
 // (optional) receives (finished, total) after each completed tile.
@@ -47,12 +57,17 @@ func (r *Renderer) Render(onTile func(finished, total int)) *image.RGBA {
 
 	var mu sync.Mutex
 	finished := 0
+	aborted := false
 	var wg sync.WaitGroup
 	for w := 0; w < runtime.NumCPU(); w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for t := range tasks {
+				if aborted || (r.Deadline != nil && time.Now().After(*r.Deadline)) {
+					aborted = true
+					continue // drain remaining tasks without rendering
+				}
 				r.renderTile(img, t.row, t.col, tileSize)
 				mu.Lock()
 				finished++
@@ -65,6 +80,9 @@ func (r *Renderer) Render(onTile func(finished, total int)) *image.RGBA {
 		}()
 	}
 	wg.Wait()
+	if aborted {
+		return nil
+	}
 	return img
 }
 
@@ -72,6 +90,9 @@ func (r *Renderer) renderTile(img *image.RGBA, row, col, size int) {
 	x0 := col * size
 	y0 := row * size
 	for y := y0; y < y0+size && y < r.Height; y++ {
+		if r.Deadline != nil && time.Now().After(*r.Deadline) {
+			return
+		}
 		for x := x0; x < x0+size && x < r.Width; x++ {
 			px := (float64(x) + 0.5) / float64(r.Width)
 			py := 1 - (float64(y)+0.5)/float64(r.Height) // flip: image y grows down
@@ -114,7 +135,7 @@ func (r *Renderer) envAt(dir geom.Vec3) geom.Vec3 {
 			t = -dir.Y // 0..1 horizon→below
 		}
 		if c := r.World.SkyCurve; c > 0 && c != 1 {
-			t = math.Pow(t, c)
+			t = beamPow(t, c)
 		}
 	}
 	return bot.Add(top.Sub(bot).MulS(t))
@@ -166,7 +187,7 @@ func (r *Renderer) fogBlend(c geom.Vec3, orig, dir geom.Vec3, dist float64) geom
 		return c
 	}
 	od := opticalDepth(f, orig.Y, dir.Y, dist)
-	tr := math.Exp(-f.K * od)
+	tr := beamExp(-f.K * od)
 	amt := 1 - tr
 	if amt > f.Max {
 		amt = f.Max
@@ -211,11 +232,11 @@ func opticalDepth(f *FogDef, y0, dy, dist float64) float64 {
 			return
 		}
 		if math.Abs(dy) < 1e-12 {
-			total += (b - a) * math.Exp(-(y0-alt)/f.Off)
+			total += (b - a) * beamExp(-(y0-alt)/f.Off)
 			return
 		}
-		ga := math.Exp(-(y0 + dy*a - alt) / f.Off)
-		gb := math.Exp(-(y0 + dy*b - alt) / f.Off)
+		ga := beamExp(-(y0 + dy*a - alt) / f.Off)
+		gb := beamExp(-(y0 + dy*b - alt) / f.Off)
 		total += f.Off / dy * (ga - gb)
 	}
 	if math.Abs(dy) < 1e-12 {
@@ -223,7 +244,7 @@ func opticalDepth(f *FogDef, y0, dy, dist float64) float64 {
 			return dist
 		}
 		if f.Off > 0 {
-			return dist * math.Exp(-(y0-alt)/f.Off)
+			return dist * beamExp(-(y0-alt)/f.Off)
 		}
 		return 0
 	}
@@ -236,7 +257,7 @@ func opticalDepth(f *FogDef, y0, dy, dist float64) float64 {
 		if math.Abs(dy) < 1e-12 {
 			return dist / (u1*u1 + 1)
 		}
-		return alt * (math.Atan(u2) - math.Atan(u1)) / dy
+		return alt * (beamAtan(u2) - beamAtan(u1)) / dy
 	}
 	sStar := (alt - y0) / dy // parameter where y crosses Alt
 	if f.Off > 0 {
@@ -372,7 +393,7 @@ func (r *Renderer) glass(ray geom.Ray, hit *geom.Hit, mat *CompiledMaterial, dep
 	if mat.Reflectivity > r0 {
 		r0 = mat.Reflectivity // POV-style reflection {min, max fresnel}
 	}
-	fr := r0 + (1-r0)*math.Pow(1-cosI, 5)
+	fr := r0 + (1-r0)*beamPow(1-cosI, 5)
 
 	rd := reflectDir(ray.Dir, n)
 	refl := r.trace(offset(hit.P, n, rd), depth-1, rng)
@@ -437,7 +458,7 @@ func (r *Renderer) specular(p, n, viewDir geom.Vec3, mat *CompiledMaterial, albe
 			continue
 		}
 		atten := lightAttenuation(l, dist)
-		spec := math.Pow(ndoth, sh) * l.Intensity * atten * k
+		spec := beamPow(ndoth, sh) * l.Intensity * atten * k
 		out = out.Add(mulV(l.Color, albedo).MulS(spec))
 	}
 	return out
@@ -530,5 +551,5 @@ func linearToSRGB(x float64) float64 {
 	if x <= 0.0031308 {
 		return 12.92 * x
 	}
-	return 1.055*math.Pow(x, 1/2.4) - 0.055
+	return 1.055*beamPow(x, 1/2.4) - 0.055
 }

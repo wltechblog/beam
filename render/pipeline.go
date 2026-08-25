@@ -88,6 +88,15 @@ func RenderScene(s *scene.Scene, opts Options) (string, error) {
 		Seed:        s.Render.Seed,
 	}
 
+	// Deadline from scene render.maxSeconds — guards runaway scenes
+	// (huge samples² ray counts, unexpected CPU slowness). Applies to
+	// BOTH CPU and GPU paths; GPU deadline is enforced after the kernel
+	// returns via the context watchdog (see GPUHook docs).
+	if s.Render.MaxSeconds > 0 {
+		t := time.Now().Add(time.Duration(s.Render.MaxSeconds * float64(time.Second)))
+		r.Deadline = &t
+	}
+
 	out := opts.Output
 	if out == "" {
 		out = s.Render.Output
@@ -103,14 +112,36 @@ func RenderScene(s *scene.Scene, opts Options) (string, error) {
 			return "", fmt.Errorf("gpu render requested but no GPU hook is registered " +
 				"(the gpu package was not linked into this binary)")
 		}
-		var gpuDT time.Duration
-		img, gpuDT, err = GPUHook(world, cam, width, height, samples,
-			r.MaxDepth, r.Exposure, r.ClipTonemap, r.Seed)
-		if err != nil {
-			return "", fmt.Errorf("gpu render failed: %w", err)
+		type gpuResult struct {
+			img *image.RGBA
+			dt  time.Duration
+			err error
 		}
+		res := make(chan gpuResult, 1)
+		go func() {
+			im, dt, e := GPUHook(world, cam, width, height, samples,
+				r.MaxDepth, r.Exposure, r.ClipTonemap, r.Seed)
+			res <- gpuResult{im, dt, e}
+		}()
+		var gr gpuResult
+		if s.Render.MaxSeconds > 0 {
+			timer := time.NewTimer(time.Until(*r.Deadline))
+			defer timer.Stop()
+			select {
+			case gr = <-res:
+			case <-timer.C:
+				return "", fmt.Errorf("gpu render exceeded maxSeconds=%.0f deadline — "+
+					"kernel did not finish (wrong device or oversized scene?)", s.Render.MaxSeconds)
+			}
+		} else {
+			gr = <-res
+		}
+		if gr.err != nil {
+			return "", fmt.Errorf("gpu render failed: %w", gr.err)
+		}
+		img = gr.img
 		if !opts.Quiet {
-			fmt.Fprintf(os.Stderr, "gpu kernel %s\n", gpuDT.Round(time.Millisecond))
+			fmt.Fprintf(os.Stderr, "gpu kernel %s\n", gr.dt.Round(time.Millisecond))
 		}
 	}
 	if img == nil {
@@ -126,6 +157,9 @@ func RenderScene(s *scene.Scene, opts Options) (string, error) {
 				}
 			})
 			fmt.Fprintln(os.Stderr)
+		}
+		if img == nil {
+			return "", errRenderDeadline
 		}
 	}
 

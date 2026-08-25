@@ -58,7 +58,26 @@ func (c *Camera) Ray(px, py, jx, jy float64, rnd *RNG) geom.Ray {
 	fp := c.orig.Add(dir.MulS(t))
 	ang := rnd.Float64() * 2 * math.Pi
 	rad := math.Sqrt(rnd.Float64()) * c.lens
-	offset := c.u.MulS(math.Cos(ang) * rad).Add(c.v.MulS(math.Sin(ang) * rad))
+	offset := c.u.MulS(beamCos(ang) * rad).Add(c.v.MulS(beamSin(ang) * rad))
 	orig := c.orig.Add(offset)
 	return geom.Ray{Orig: orig, Dir: fp.Sub(orig).Norm()}
+}
+
+// GPUParams exports the precomputed camera basis for the GPU kernel. The
+// basis is computed here once in float64, so the kernel consumes bit-ident
+// values and never re-derives them.
+// Layout: orig(3) llc(3) horiz(3) vert(3) u(3) v(3) w(3) lens focus = 23.
+func (c *Camera) GPUParams() [23]float64 {
+	var p [23]float64
+	put := func(i int, v geom.Vec3) { p[i] = v.X; p[i+1] = v.Y; p[i+2] = v.Z }
+	put(0, c.orig)
+	put(3, c.llc)
+	put(6, c.horiz)
+	put(9, c.vert)
+	put(12, c.u)
+	put(15, c.v)
+	put(18, c.w)
+	p[21] = c.lens
+	p[22] = c.focus
+	return p
 }

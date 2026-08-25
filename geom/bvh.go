@@ -201,6 +201,31 @@ func (b *BVH) Intersect(r Ray) *Hit {
 	return best
 }
 
+// FlatNode is one BVH node in array form, exported for GPU flattening.
+type FlatNode struct {
+	BMin, BMax Vec3
+	Left       int32 // leaf: triangle start (index into triOrder); internal: left child node
+	Right      int32 // internal: right child node
+	Count      int32 // leaf: triangle count; 0 marks internal
+}
+
+// Flatten exports the BVH nodes and the leaf triangle order (indices into
+// mesh.Tris) for GPU upload. Nodes are in the same array layout used by
+// Intersect; leaf Left indexes triOrder.
+func (b *BVH) Flatten() ([]FlatNode, []int32) {
+	nodes := make([]FlatNode, len(b.nodes))
+	for i, n := range b.nodes {
+		nodes[i] = FlatNode{
+			BMin:  n.bounds.Min,
+			BMax:  n.bounds.Max,
+			Left:  b.left[i],
+			Right: n.right,
+			Count: b.count[i],
+		}
+	}
+	return nodes, b.triOrder
+}
+
 func (b *BVH) intersectNode(n int32, r Ray, best **Hit) {
 	node := b.nodes[n]
 	tmax := math.MaxFloat64

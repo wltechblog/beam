@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/wltechblog/beam/gpu"
 	"os"
 	"path/filepath"
 	"time"
@@ -18,6 +19,7 @@ func main() {
 	quiet := flag.Bool("q", false, "suppress progress output")
 	out := flag.String("o", "", "output path override (default: <scene>.png)")
 	fit := flag.Bool("fit", false, "pre-render fit check: project object bounds to screen, report clipping, exit 2 if anything clips")
+	gpuFlag := flag.Bool("gpu", false, "render on GPU (OpenCL; falls back to CPU if unavailable)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: beam [options] scene.json\n\noptions:\n")
 		flag.PrintDefaults()
@@ -33,10 +35,14 @@ func main() {
 	}
 
 	start := time.Now()
+	if *gpuFlag {
+		render.SetGPUHook(gpu.Hook)
+	}
 	path, err := render.RenderFile(flag.Arg(0), render.Options{
 		Preview: *preview,
 		Quiet:   *quiet,
 		Output:  *out,
+		GPU:     *gpuFlag,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "beam:", err)

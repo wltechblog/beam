@@ -18,6 +18,20 @@ type Options struct {
 	Quiet   bool   // no progress output
 	Output  string // output path override
 	Dir     string // base dir for mesh/font resolution (defaults to scene dir)
+	GPU     bool   // render on GPU via the registered hook (falls back to CPU)
+}
+
+// GPUHook, when set, renders a compiled scene on the GPU and returns the
+// image. It exists as a hook so the render package carries no OpenCL
+// dependency; the gpu package registers itself from main via
+// render.SetGPUHook. Must not write the PNG — pipeline owns that.
+var GPUHook func(w *World, cam *Camera, width, height, samples, maxDepth int,
+	exposure float64, clip bool, seed int64) (*image.RGBA, time.Duration, error)
+
+// SetGPUHook installs the GPU renderer (idempotent, called from main).
+func SetGPUHook(f func(w *World, cam *Camera, width, height, samples, maxDepth int,
+	exposure float64, clip bool, seed int64) (*image.RGBA, time.Duration, error)) {
+	GPUHook = f
 }
 
 // RenderFile loads, compiles, and renders a scene file to PNG. Single entry
@@ -84,18 +98,34 @@ func RenderScene(s *scene.Scene, opts Options) (string, error) {
 
 	start := time.Now()
 	var img *image.RGBA
-	if opts.Quiet {
-		img = r.Render(nil)
-	} else {
-		lastPct := -1
-		img = r.Render(func(finished, total int) {
-			pct := finished * 100 / total
-			if pct != lastPct {
-				lastPct = pct
-				fmt.Fprintf(os.Stderr, "\rrender %3d%%", pct)
+	if opts.GPU && GPUHook != nil {
+		var gpuDT time.Duration
+		img, gpuDT, err = GPUHook(world, cam, width, height, samples,
+			r.MaxDepth, r.Exposure, r.ClipTonemap, r.Seed)
+		if err != nil {
+			// GPU failed — plain CPU fallback keeps the render alive
+			if !opts.Quiet {
+				fmt.Fprintf(os.Stderr, "gpu render failed (%v), falling back to cpu\n", err)
 			}
-		})
-		fmt.Fprintln(os.Stderr)
+			img = nil
+		} else if !opts.Quiet {
+			fmt.Fprintf(os.Stderr, "gpu kernel %s\n", gpuDT.Round(time.Millisecond))
+		}
+	}
+	if img == nil {
+		if opts.Quiet {
+			img = r.Render(nil)
+		} else {
+			lastPct := -1
+			img = r.Render(func(finished, total int) {
+				pct := finished * 100 / total
+				if pct != lastPct {
+					lastPct = pct
+					fmt.Fprintf(os.Stderr, "\rrender %3d%%", pct)
+				}
+			})
+			fmt.Fprintln(os.Stderr)
+		}
 	}
 
 	f, err := os.Create(out)

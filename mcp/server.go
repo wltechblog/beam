@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/wltechblog/beam/gpu"
 	"github.com/wltechblog/beam/render"
 	"github.com/wltechblog/beam/scene"
 )
@@ -126,6 +127,7 @@ type renderArgs struct {
 	SceneFile string          `json:"sceneFile"` // path to .json on disk
 	Output    string          `json:"output"`    // output PNG path (optional)
 	Dir       string          `json:"dir"`       // base dir for mesh/font resolution
+	GPU       bool            `json:"gpu"`       // render on GPU (OpenCL)
 }
 
 func decodeRenderArgs(args map[string]interface{}) (renderArgs, []byte, error) {
@@ -178,6 +180,10 @@ func toolRender(args map[string]interface{}, preview bool) (string, bool) {
 		Quiet:   true,
 		Output:  ra.Output,
 		Dir:     ra.Dir,
+		GPU:     ra.GPU,
+	}
+	if ra.GPU {
+		render.SetGPUHook(gpu.Hook)
 	}
 	start := time.Now()
 	path, err := render.RenderScene(s, opts)
@@ -306,7 +312,7 @@ func toolsList() []map[string]interface{} {
 	return []map[string]interface{}{
 		{
 			"name":        "beam_render",
-			"description": "Render a Beam scene to PNG at full quality. Input is the complete scene JSON (get the shape via beam_schema). Returns output path, dimensions, and render seconds. Renders are deterministic for a given scene+seed.",
+			"description": "Render a Beam scene to PNG at full quality. Input is the complete scene JSON (get the shape via beam_schema). Returns output path, dimensions, and render seconds. Renders are deterministic for a given scene+seed. gpu:true renders on OpenCL GPU (~10x faster, fp32).",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -319,7 +325,7 @@ func toolsList() []map[string]interface{} {
 		},
 		{
 			"name":        "beam_preview",
-			"description": "Fast low-res preview render (320px, 1 sample) of a Beam scene — for the iterate loop: preview, inspect visually, adjust, then beam_render. Input matches beam_render.",
+			"description": "Fast low-res preview render (320px, 1 sample) of a Beam scene — for the iterate loop: preview, inspect visually, adjust, then beam_render. Input matches beam_render. gpu:true renders on OpenCL GPU.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{

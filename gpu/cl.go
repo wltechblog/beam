@@ -8,7 +8,13 @@ package gpu
 import "C"
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"unsafe"
 )
 
@@ -20,6 +26,20 @@ type Device struct {
 }
 
 // ProbeDevices lists GPU devices across all platforms.
+// gpuRank scores devices so discrete GPUs (A770) are preferred over
+// integrated ones (UHD). Falls back to 0 for unknown names.
+func gpuRank(name string) int {
+	switch {
+	case strings.Contains(name, "Arc") && strings.Contains(name, "770"):
+		return 100
+	case strings.Contains(name, "Arc"):
+		return 80
+	case strings.Contains(name, "UHD"), strings.Contains(name, "Iris"):
+		return 10
+	}
+	return 50
+}
+
 func ProbeDevices() ([]Device, error) {
 	var nplat C.cl_uint
 	if rc := C.clGetPlatformIDs(0, nil, &nplat); rc != C.CL_SUCCESS {
@@ -46,6 +66,9 @@ func ProbeDevices() ([]Device, error) {
 			devs = append(devs, Device{Platform: p, ID: d, Name: deviceName(d)})
 		}
 	}
+	sort.SliceStable(devs, func(i, j int) bool {
+		return gpuRank(devs[i].Name) > gpuRank(devs[j].Name)
+	})
 	return devs, nil
 }
 
@@ -117,7 +140,36 @@ func (c *Context) Release() {
 
 // BuildProgram compiles source for this context's device; options are
 // compiler flags (e.g. "-D BEAM_DOUBLE"). Build log included on failure.
+// cacheDir returns the kernel-binary cache directory, creating it if
+// needed. Lives under the user cache dir so container rebuilds that keep
+// home/workspace don't force a recompile.
+func cacheDir() string {
+	base := os.Getenv("BEAM_KERNEL_CACHE")
+	if base == "" {
+		d, err := os.UserCacheDir()
+		if err != nil {
+			d = os.TempDir()
+		}
+		base = d
+	}
+	dir := filepath.Join(base, "beam-ocl")
+	_ = os.MkdirAll(dir, 0o755)
+	return dir
+}
+
 func (c *Context) BuildProgram(src, options string) error {
+	sum := sha256.Sum256([]byte(src + "\x00" + options + "\x00" + c.Dev.Name))
+	key := hex.EncodeToString(sum[:16])
+	path := filepath.Join(cacheDir(), key+".bin")
+
+	// Try cached binary first.
+	if bin, err := os.ReadFile(path); err == nil {
+		if prog, err2 := c.programFromBinary(bin); err2 == nil {
+			c.program = prog
+			return nil
+		}
+	}
+
 	csrc := C.CString(src)
 	defer C.free(unsafe.Pointer(csrc))
 	lengths := []C.size_t{C.size_t(len(src))}
@@ -134,8 +186,48 @@ func (c *Context) BuildProgram(src, options string) error {
 		C.clReleaseProgram(cprog)
 		return fmt.Errorf("clBuildProgram: %d\n%s", int(rc), log)
 	}
+	if bin, err := c.programBinary(cprog); err == nil {
+		_ = os.WriteFile(path, bin, 0o644) // best-effort cache write
+	}
 	c.program = cprog
 	return nil
+}
+
+// programFromBinary loads a cl_program from a previously saved binary blob.
+func (c *Context) programFromBinary(bin []byte) (C.cl_program, error) {
+	lengths := []C.size_t{C.size_t(len(bin))}
+	buf := (*C.uchar)(C.CBytes(bin))
+	defer C.free(unsafe.Pointer(buf))
+	p := C.clCreateProgramWithBinary(c.ctx, 1, &c.Dev.ID, &lengths[0],
+		&buf, nil, nil)
+	if p == nil {
+		return nil, fmt.Errorf("clCreateProgramWithBinary failed")
+	}
+	empty := C.CString("")
+	defer C.free(unsafe.Pointer(empty))
+	if rc := C.clBuildProgram(p, 1, &c.Dev.ID, empty, nil, nil); rc != C.CL_SUCCESS {
+		C.clReleaseProgram(p)
+		return nil, fmt.Errorf("clBuildProgram(binary): %d", int(rc))
+	}
+	return p, nil
+}
+
+// programBinary extracts the compiled program binary.
+func (c *Context) programBinary(p C.cl_program) ([]byte, error) {
+	var sz C.size_t
+	if rc := C.clGetProgramInfo(p, C.CL_PROGRAM_BINARY_SIZES, C.size_t(unsafe.Sizeof(sz)), unsafe.Pointer(&sz), nil); rc != C.CL_SUCCESS || sz == 0 {
+		return nil, fmt.Errorf("clGetProgramInfo(sizes): %d", int(rc))
+	}
+	bin := make([]byte, sz)
+	// The pointer array must live in C memory: cgo forbids passing a Go
+	// pointer to a pointer.
+	pArr := C.malloc(C.size_t(unsafe.Sizeof((*C.uchar)(nil))))
+	defer C.free(pArr)
+	*(**C.uchar)(unsafe.Pointer(pArr)) = (*C.uchar)(unsafe.Pointer(&bin[0]))
+	if rc := C.clGetProgramInfo(p, C.CL_PROGRAM_BINARIES, C.size_t(unsafe.Sizeof((*C.uchar)(nil))), unsafe.Pointer(pArr), nil); rc != C.CL_SUCCESS {
+		return nil, fmt.Errorf("clGetProgramInfo(binaries): %d", int(rc))
+	}
+	return bin, nil
 }
 
 func (c *Context) buildLog(p C.cl_program) string {
@@ -212,7 +304,24 @@ func (c *Context) SetArg(idx int, b *Buffer) error {
 // Run2D enqueues the kernel over a 2D global size.
 func (c *Context) Run2D(gx, gy int) error {
 	g := [2]C.size_t{C.size_t(gx), C.size_t(gy)}
-	rc := C.clEnqueueNDRangeKernel(c.queue, c.kernel, 2, nil, &g[0], nil, 0, nil, nil)
+	var local *[2]C.size_t
+	if ls := os.Getenv("BEAM_LOCAL_SIZE"); ls != "" {
+		var n int
+		if _, err := fmt.Sscanf(ls, "%d", &n); err == nil && n > 0 {
+			// pad global size to a multiple of n, kernel guards bounds
+			for d := 0; d < 2; d++ {
+				if r := g[d] % C.size_t(n); r != 0 {
+					g[d] += C.size_t(n) - r
+				}
+			}
+			local = &[2]C.size_t{C.size_t(1), C.size_t(n)}
+		}
+	}
+	var lp *C.size_t
+	if local != nil {
+		lp = &local[0]
+	}
+	rc := C.clEnqueueNDRangeKernel(c.queue, c.kernel, 2, nil, &g[0], lp, 0, nil, nil)
 	if rc != C.CL_SUCCESS {
 		return fmt.Errorf("clEnqueueNDRangeKernel: %d", int(rc))
 	}

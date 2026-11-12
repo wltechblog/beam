@@ -52,7 +52,7 @@ func RenderTimeline(s *scene.Scene, opts Options, fpsOverride int) (string, erro
 		fps = fpsOverride
 	}
 	if fps < 1 {
-		fps = 30
+		fps = 30 // scene said nothing AND -fps unset: 30
 	}
 	frames := animFrameCount(a)
 

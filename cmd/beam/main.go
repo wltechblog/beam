@@ -22,7 +22,9 @@ func main() {
 	gpuFlag := flag.Bool("gpu", false, "render on GPU (OpenCL; hard-fails with diagnostics if no device)")
 	orbit := flag.Int("orbit", 0, "render a 360° turntable orbit video: N frames around the lookAt target")
 	anim := flag.Bool("anim", false, "render the scene's animation block (keyframed timeline) to an MP4")
-	fps := flag.Int("fps", 30, "output video framerate for -orbit and -anim")
+	// 0 = unset: -anim then honors the scene's animation.fps (RenderTimeline
+	// falls back to 30 only when neither is given). -orbit keeps 30 unless set.
+	fps := flag.Int("fps", 0, "output video framerate for -orbit and -anim (0 = scene animation.fps for -anim)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: beam [options] scene.json\n\noptions:\n")
 		flag.PrintDefaults()

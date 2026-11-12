@@ -83,7 +83,7 @@ func RenderOrbit(s *scene.Scene, opts Options, orbit OrbitOpts) (string, error) 
 		return "", fmt.Errorf("orbit needs at least 2 frames, got %d", orbit.Frames)
 	}
 	if orbit.FPS < 1 {
-		orbit.FPS = 30
+		orbit.FPS = 30 // orbit has no scene-side fps; 0 (unset -fps) means 30
 	}
 
 	s.ApplyDefaults()

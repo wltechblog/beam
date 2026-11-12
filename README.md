@@ -42,7 +42,8 @@ beam [options] scene.json
   -anim      render the scene's animation block (keyframed timeline) to an
              MP4: duration x fps frames, every track sampled at each frame
              time. See "Animation" below.
-  -fps N     output video framerate for -orbit and -anim (default 30)
+  -fps N     output video framerate override for -orbit and -anim
+             (default: 30 for -orbit; the scene's animation.fps for -anim)
 ```
 
 Flags precede the scene path (Go flag package convention).

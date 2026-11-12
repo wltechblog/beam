@@ -15,23 +15,30 @@ given the schema).
 2. **Deterministic by construction** — pure Go, strict IEEE-754 (Go forbids
    fused-multiply-add reassociation), per-pixel RNG seeded by coordinates.
    Same scene + seed = byte-identical PNG on any platform.
-3. **CPU now, GPU-ready** — the renderer is embarrassingly parallel (tile
-   scheduler + goroutines). The GPU boundary (OpenCL wavefront on the Arc
-   A770) will consume flattened scene arrays; the JSON layer, scheduler, and
-   output pipeline never change.
-4. **Zero heavy dependencies** — stdlib + pure-Go libraries only (glTF loader,
-   font outline reader). No CGO anywhere.
+3. **CPU + GPU** — the tile scheduler renders on all cores; the OpenCL path
+   (Intel Arc) renders the same scene ~11× faster with fp32 parity (mean
+   byte diff 0.00 on the benchmark scene). The JSON layer, scheduler, and
+   output pipeline are identical either way.
+4. **Zero heavy dependencies** — stdlib + pure-Go libraries only (glTF
+   loader, font outline reader). The single CGO surface is the optional
+   OpenCL GPU path; everything else builds pure-Go.
 
 ## CLI
 
 ```
-beam render <scene.json> [-o out.png] [--preview] [--quiet]
-beam validate <scene.json>
-beam version
+beam [options] scene.json
+
+  -preview   fast low-res render (320px wide, 1 sample)
+  -q         suppress progress output
+  -o FILE    output path override (default: <scene>.png)
+  -fit       pre-render screen-fit check: project object bounds to pixels,
+             report coverage/clipping, exit 2 if anything clips
+  -gpu       render on GPU (OpenCL; hard-fails with diagnostics if no device)
 ```
 
-`--preview` renders at 320px wide, 1 sample — fast enough for an agent
-write → preview → look → refine loop.
+Flags precede the scene path (Go flag package convention).
+`-preview` is fast enough for an agent write → preview → look → refine loop.
+`render.maxSeconds` in the scene aborts runaway renders on both CPU and GPU.
 
 ## Scene schema (v1)
 
@@ -81,20 +88,38 @@ flattening → robust ear-clip triangulation (Mapbox earcut algorithm, ported)
 ## Layout
 
 ```
-geom/      vectors, matrices, triangle meshes (GPU-flattenable data)
-scene/     schema, validation (JSON-pointer errors), loading
-render/    camera, BVH, Whitted integrator, tile scheduler, tonemap
-asset/     OBJ / STL / glTF importers
-text3d/    glyph outlines → earcut → extrusion
-cmd/beam/  CLI
-scenes/    example scenes
+geom/          vectors, matrices, triangle meshes (GPU-flattenable data)
+scene/         schema, validation (JSON-pointer errors), loading
+render/        camera, BVH, Whitted integrator, tile scheduler, tonemap,
+               beammath.go (portable transcendental ports shared with GPU)
+asset/         OBJ / STL / glTF importers, extruded text (asset/text.go:
+               glyph outlines → earcut → extrusion)
+gpu/           OpenCL device renderer (kernels + scene flattener, CPU parity)
+mcp/           MCP stdio server (render/preview/validate/schema tools)
+cmd/beam/      CLI
+cmd/beam-mcp/  MCP server entry point
+pov-benchmark/ POV-Ray 3.8 benchmark port + parity tooling
+simple-ab/     side-by-side POV/Beam A-B parity scene
+gpu-smoke/     sub-second GPU canary scene
+gpu-soak/      self-judging GPU-vs-CPU soak test
 ```
+
+## Status
+
+- **MCP server shipped** (`cmd/beam-mcp`): `beam_render`, `beam_preview`,
+  `beam_validate`, `beam_schema` — agents author scenes from the schema,
+  validate with full error lists + screen-fit checks, preview at 320px,
+  then render full quality. Deterministic: MCP render ≡ CLI render,
+  byte-identical.
+- **GPU shipped** (`gpu/`): Intel Arc A770 OpenCL renderer, ~11× the CPU
+  on the POV benchmark scene, fp32 parity within rounding noise. Bit-exact
+  fp64 kernels behind `-D BEAM_DOUBLE=1` for datacenter GPUs.
+- **POV-Ray parity tooling**: benchmark scene port (33 objects, real CSG
+  sockets, quaternion julias, superellipsoids, isosurface bollard),
+  handedness-correct POV→Beam mapping, A/B comparison harness.
 
 ## Roadmap
 
-- Phase 2: MCP server (`render` / `preview` / `validate` / `import`) for the
-  agent iterate loop; golden-test ports of classic POV sample scenes
-- Phase 3: OpenCL device behind the geom boundary (Intel Arc A770)
-- Phase 4: timeline animation (keyframes, ease curves), volumetric
-  fire/plasma via ray-marched fbm fields, particle instancing (rain)
+- Timeline animation (keyframes, ease curves), volumetric fire/plasma via
+  ray-marched fbm fields, particle instancing (rain)
 - Later: WASM shader escape hatch, bevel text, CSG

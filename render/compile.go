@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/wltechblog/beam/geom"
 	"github.com/wltechblog/beam/scene"
@@ -39,6 +40,33 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 		if s.Environment.Sky[2] != nil {
 			w.EnvMid = vec3Of(s.Environment.Sky[2])
 		}
+	}
+	if s.Environment != nil && s.Environment.Media != nil {
+		m := s.Environment.Media
+		// Media altitude semantics differ from ground fog: with no
+		// altitude/offset authored the media is UNIFORM (plain POV
+		// fog_type 1 behavior — dense everywhere). Altitude > 0 opts
+		// into the ground-fog height profile.
+		alt := m.Altitude
+		if alt == 0 && m.Offset == 0 && m.Profile != "atan" {
+			alt = math.Inf(1)
+		}
+		w.Media = &MediaDef{
+			Color: rgbv(m.Color),
+			K:     1 / m.Distance,
+			Alt:   alt,
+			Off:   m.Offset,
+			Atan:  m.Profile == "atan",
+		}
+		steps := m.Samples
+		if steps <= 0 {
+			steps = 8
+		}
+		if steps > 64 {
+			steps = 64
+		}
+		w.Media.Steps = steps
+		w.Fog = nil // media replaces fog
 	}
 	if s.Environment != nil && s.Environment.Fog != nil {
 		f := s.Environment.Fog

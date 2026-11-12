@@ -161,18 +161,27 @@ func skyMapAt(stops []SkyStop, dirY float64) geom.Vec3 {
 	return stops[n-1].Color
 }
 
-// trace follows one ray, compositing fog over the traversed segment.
-// depth caps reflection/refraction recursion.
+// trace follows one ray, compositing fog/media over the traversed
+// segment. depth caps reflection/refraction recursion.
 func (r *Renderer) trace(ray geom.Ray, depth int, rng *RNG) geom.Vec3 {
 	if depth <= 0 {
-		return r.fogBlend(r.envAt(ray.Dir), ray.Orig, ray.Dir, fogFar)
+		return r.composite(r.envAt(ray.Dir), ray.Orig, ray.Dir, fogFar)
 	}
 	hit, obj := r.World.Intersect(ray)
 	if hit == nil {
-		return r.fogBlend(r.envAt(ray.Dir), ray.Orig, ray.Dir, fogFar)
+		return r.composite(r.envAt(ray.Dir), ray.Orig, ray.Dir, fogFar)
 	}
 	c := r.shade(ray, hit, obj, depth, rng)
-	return r.fogBlend(c, ray.Orig, ray.Dir, hit.T)
+	return r.composite(c, ray.Orig, ray.Dir, hit.T)
+}
+
+// composite applies whichever atmospheric model is authored: media
+// (extinction + single scattering) when set, else fog (absorption only).
+func (r *Renderer) composite(c geom.Vec3, orig, dir geom.Vec3, dist float64) geom.Vec3 {
+	if r.World.Media != nil {
+		return r.mediaComposite(c, orig, dir, dist)
+	}
+	return r.fogBlend(c, orig, dir, dist)
 }
 
 // fogFar caps fog integration for miss rays; with any sane fog distance
@@ -193,6 +202,117 @@ func (r *Renderer) fogBlend(c geom.Vec3, orig, dir geom.Vec3, dist float64) geom
 		amt = f.Max
 	}
 	return c.MulS(1 - amt).Add(f.Color.MulS(amt))
+}
+
+// mediaComposite composites participating media over the segment orig →
+// orig+dir·dist: in-scattered light accumulates along a deterministic
+// midpoint march (Steps samples, zero RNG draws so CPU/GPU streams stay
+// identical), and the surface/environment radiance c is attenuated by the
+// closed-form segment transmittance. At each sample every light
+// contributes lightColor·intensity·attenuation, occluded by the geometry
+// shadow ray AND attenuated by the media along the light path — that
+// light-path extinction is what turns occluders into visible shafts.
+func (r *Renderer) mediaComposite(c geom.Vec3, orig, dir geom.Vec3, dist float64) geom.Vec3 {
+	m := r.World.Media
+	if dist > fogFar {
+		dist = fogFar
+	}
+	// Cap the march at the visibility horizon: density <= 1 everywhere,
+	// so transmittance >= exp(-K·t) — beyond 7/K (7 e-foldings ≈ 1e-3)
+	// nothing can contribute. Without this, sky rays (dist = fogFar)
+	// space their samples thousands of units apart and the visible
+	// near segment where all the in-scatter lives is never sampled.
+	marchDist := dist
+	if cap := 7 / m.K; marchDist > cap {
+		marchDist = cap
+	}
+	step := marchDist / float64(m.Steps)
+	var acc geom.Vec3
+	for i := 0; i < m.Steps; i++ {
+		tMid := (float64(i) + 0.5) * step
+		p := orig.Add(dir.MulS(tMid))
+		sigma := mediaDensity(m, p.Y)
+		if sigma <= 0 {
+			continue
+		}
+		tTo := beamExp(-m.K * mediaOD(m, orig.Y, dir.Y, tMid))
+		if tTo < 1e-4 {
+			break // fully extinguished: later samples cannot contribute
+		}
+		slice := 1 - beamExp(-m.K*sigma*step) // extinction across this step
+		insc := r.mediaInscatter(m, p)
+		acc = acc.Add(mulV(insc, m.Color).MulS(tTo * slice))
+	}
+	tAll := beamExp(-m.K * mediaOD(m, orig.Y, dir.Y, dist))
+	return acc.Add(c.MulS(tAll))
+}
+
+// mediaInscatter sums direct light arriving at p from every light,
+// geometry-occluded and media-attenuated along the light path. Isotropic
+// phase folded into the artist scale (beam lights are not physical
+// units); the march slice weight lives in mediaComposite.
+func (r *Renderer) mediaInscatter(m *MediaDef, p geom.Vec3) geom.Vec3 {
+	var out geom.Vec3
+	for i := range r.World.Lights {
+		l := &r.World.Lights[i]
+		ld, dist := lightDir(l, p)
+		if ld == (geom.Vec3{}) {
+			continue
+		}
+		o := p.Add(ld.MulS(1e-4))
+		trans := r.shadowTrans(o, ld, dist)
+		if trans.X <= 0 && trans.Y <= 0 && trans.Z <= 0 {
+			continue
+		}
+		// Media transmittance along the light path. Directional lights
+		// are infinitely distant — an infinite path through uniform
+		// media would extinguish everything — so they skip it: model as
+		// a collimated sun beam entering the scene (classic god rays).
+		tm := 1.0
+		if l.Kind != 'd' {
+			tm = beamExp(-m.K * mediaOD(m, p.Y, ld.Y, dist))
+		}
+		atten := lightAttenuation(l, dist)
+		out = out.Add(mulV(l.Color, trans).MulS(l.Intensity * atten * tm))
+	}
+	return out
+}
+
+// mediaDensity is the unitless density profile at height y — the same
+// profile fog integrates in closed form (opticalDepth), evaluated at a
+// point: 1 below Alt (or the POV atan ground-fog curve), exponential
+// falloff above.
+func mediaDensity(m *MediaDef, y float64) float64 {
+	if m.Atan {
+		if m.Alt == 0 {
+			return 0
+		}
+		u := (y - m.Off) / m.Alt
+		return 1 / (u*u + 1)
+	}
+	if y <= m.Alt {
+		return 1
+	}
+	if m.Off > 0 {
+		return beamExp(-(y - m.Alt) / m.Off)
+	}
+	return 0
+}
+
+// mediaOD is opticalDepth for a MediaDef (same closed-form integrals).
+func mediaOD(m *MediaDef, y0, dy, dist float64) float64 {
+	return opticalDepth(&FogDef{Alt: m.Alt, Off: m.Off, Atan: m.Atan}, y0, dy, dist)
+}
+
+// mediaTrans is segment transmittance through the media — used by the
+// light path (shaft dimming) and by surface shadow rays (direct light
+// through fog reaches surfaces dimmer).
+func (r *Renderer) mediaTrans(orig, dir geom.Vec3, dist float64) float64 {
+	m := r.World.Media
+	if m == nil {
+		return 1
+	}
+	return beamExp(-m.K * mediaOD(m, orig.Y, dir.Y, dist))
 }
 
 // opticalDepth integrates fog density along a segment of length dist
@@ -372,6 +492,14 @@ func (r *Renderer) directLight(p, n, albedo geom.Vec3, diffuseK, energyScale flo
 			} else {
 				shadowRay := offset(p, n, ld)
 				trans = r.shadowTrans(shadowRay.Orig, ld, dist)
+			}
+			// direct light also attenuates through the media layer on
+			// its way to the surface (thick fog dims surfaces).
+			// Directional lights skip it — same sun-beam semantics as
+			// mediaInscatter.
+			if r.World.Media != nil && l.Kind != 'd' {
+				mt := r.mediaTrans(p, ld, dist)
+				trans = trans.MulS(mt)
 			}
 			if trans.X <= 0 && trans.Y <= 0 && trans.Z <= 0 {
 				continue

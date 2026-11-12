@@ -201,6 +201,22 @@ func (s *Scene) Validate() []ValidationErr {
 		if s.Environment.Ambient < 0 {
 			add("/environment/ambient", "must be >= 0")
 		}
+		if m := s.Environment.Media; m != nil {
+			if !v3(m.Color) {
+				add("/environment/media/color", "must be [r,g,b]")
+			}
+			if m.Distance <= 0 {
+				add("/environment/media/distance", "must be > 0 (e-folding distance)")
+			}
+			if m.Samples < 0 || m.Samples > 64 {
+				add("/environment/media/samples", "must be in [0,64] (0 = default 8)")
+			}
+			switch m.Profile {
+			case "", "exp", "atan":
+			default:
+				add("/environment/media/profile", "must be exp | atan (default exp)")
+			}
+		}
 	}
 
 	// Render

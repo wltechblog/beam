@@ -44,6 +44,8 @@ type World struct {
 	// compile time so both the CPU renderer and the GPU hook see it.
 	ShadowSamples int
 	Fog           *FogDef
+	// Media replaces Fog when set: extinction + single scattering.
+	Media *MediaDef
 }
 
 // FogDef is compiled fog parameters (exponential + ground-fog falloff).
@@ -56,6 +58,21 @@ type FogDef struct {
 	// Atan switches density to POV-Ray fog_type 2: 1/(u^2+1) with
 	// u = (y-Off)/Alt, whose segment integral is an atan difference.
 	Atan bool
+}
+
+// MediaDef is compiled participating media: extinction with the same
+// height profile as fog, PLUS single scattering (shadow rays from march
+// samples → light shafts). Replaces FogDef when both are authored —
+// media is the physically richer model of the same absorption.
+type MediaDef struct {
+	Color geom.Vec3
+	K     float64 // extinction coefficient (1/distance)
+	Alt   float64 // dense below this world-space height
+	Off   float64 // falloff scale above Alt; 0 = hard cutoff
+	Atan  bool    // POV fog_type 2 density profile
+	// Single scattering: deterministic midpoint march of this many steps
+	// per ray segment; each step shadow-rays toward every light.
+	Steps int
 }
 
 // Object3D is one renderable object (primitive or mesh instance).

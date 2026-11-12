@@ -164,6 +164,12 @@ type Environment struct {
 	// (POV fog_type 2 style): fully dense below Altitude, falling off
 	// exponentially above with scale Offset.
 	Fog *Fog `json:"fog,omitempty"`
+	// Media is participating media with single scattering: extinction
+	// (same height profile as fog) PLUS in-scattered light — shadow rays
+	// from each march sample produce light shafts / god rays. When
+	// present it replaces fog compositing (fog is the absorption-only
+	// approximation of the same physics).
+	Media *Media `json:"media,omitempty"`
 	// SkyCurve bends the gradient: t' = t^SkyCurve. 1 = linear;
 	// <1 keeps the zenith color closer to the horizon (POV-style skies
 	// that stay blue low down); >1 concentrates change near the horizon.
@@ -185,6 +191,26 @@ type Fog struct {
 	// ground level), whose ray integral is the atan difference below.
 	// "exp" (default) is the height-exponential profile described above.
 	Profile string `json:"profile,omitempty"`
+}
+
+// Media describes participating media with single scattering. Extinction
+// uses the same height profile as Fog (distance = e-folding at full
+// density; altitude/offset/profile shape it). On top, render mediaSamples
+// deterministic march steps along every camera/shading ray: each sample
+// shadow-rays toward every light, and unshadowed light in-scatters,
+// attenuated by transmittance to both the light and the viewer — that is
+// what draws light shafts and god rays.
+type Media struct {
+	Color    []float64 `json:"color"`
+	Distance float64   `json:"distance"` // e-folding extinction distance at full density
+	// With no Altitude/Offset/Profile authored the media is UNIFORM:
+	// dense everywhere (plain POV fog_type 1). Altitude > 0 opts into
+	// the ground-fog height profile: dense below Altitude, exponential
+	// falloff above with scale Offset (0 = hard cutoff).
+	Altitude float64 `json:"altitude,omitempty"`
+	Offset   float64 `json:"offset,omitempty"`
+	Profile  string  `json:"profile,omitempty"` // "exp" (default) | "atan" — same profiles as fog
+	Samples  int     `json:"samples,omitempty"` // march steps per ray segment (default 8, max 64)
 }
 
 // RenderOpts controls output.

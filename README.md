@@ -32,14 +32,17 @@ beam [options] scene.json
 
   -preview   fast low-res render (320px wide, 1 sample)
   -q         suppress progress output
-  -o FILE    output path override (default: <scene>.png; .mp4 for -orbit)
+  -o FILE    output path override (default: <scene>.png; .mp4 for -orbit/-anim)
   -fit       pre-render screen-fit check: project object bounds to pixels,
              report coverage/clipping, exit 2 if anything clips
   -gpu       render on GPU (OpenCL; hard-fails with diagnostics if no device)
   -orbit N   render a 360° turntable orbit video: N frames, camera circling
              the lookAt target at the scene camera's height/radius; frame 0
              is the scene's own view; assembled to H.264 MP4 via ffmpeg
-  -fps N     output video framerate for -orbit (default 30)
+  -anim      render the scene's animation block (keyframed timeline) to an
+             MP4: duration x fps frames, every track sampled at each frame
+             time. See "Animation" below.
+  -fps N     output video framerate for -orbit and -anim (default 30)
 ```
 
 Flags precede the scene path (Go flag package convention).
@@ -91,6 +94,50 @@ Real 3D extruded text: TrueType glyph outlines (`go-sfnt`) → adaptive curve
 flattening → robust ear-clip triangulation (Mapbox earcut algorithm, ported)
 → extruded solid with correct outward-facing normals. Bevel is on the roadmap.
 
+## Animation
+
+Scenes carry an optional `animation` block: a keyframed timeline animating
+the camera, named objects, and named lights. Render it with `-anim` (or
+`animate: true` over MCP) — duration x fps frames, assembled to MP4.
+
+```json
+{
+  "objects": [
+    {"type": "sphere", "name": "ball", "center": [-2, 0.75, 0],
+     "radius": 0.75, "material": "red"}
+  ],
+  "lights": [
+    {"type": "point", "name": "key", "pos": [-4, 6, -4], "intensity": 1.1}
+  ],
+  "animation": {
+    "duration": 2,
+    "fps": 30,
+    "tracks": [
+      {"target": "ball", "property": "translate", "ease": "smooth",
+       "keys": [{"t": 0, "value": [0, 0, 0]}, {"t": 2, "value": [4, 0, 0]}]},
+      {"target": "camera", "property": "pos",
+       "keys": [{"t": 0, "value": [0, 2, -8]}, {"t": 2, "value": [5, 3, -8]}]},
+      {"target": "key", "property": "intensity",
+       "keys": [{"t": 0, "value": [1.1]}, {"t": 1, "value": [0.3]}, {"t": 2, "value": [1.1]}]}
+    ]
+  }
+}
+```
+
+- **Targets**: `"camera"`, or any named object/light (`name` field).
+- **Properties**: camera `pos` / `lookAt` / `fov` / `aperture`; objects
+  `translate` / `rotate` / `scale` (the transform channels — a track
+  replaces only its own channel, the rest keep their authored values);
+  lights `pos` / `color` / `intensity`.
+- **Keys**: `{t, value}` with strictly increasing times; vector properties
+  take `[x,y,z]`, scalars take `[v]`. Outside the key span the authored
+  value holds (no extrapolation).
+- **Ease**: `linear` (default) / `smooth` / `easeIn` / `easeOut`, applied
+  between keyframes.
+- Frame 0 with identity keys at t=0 is byte-identical to a still render of
+  the same scene. A plain render ignores the animation block entirely.
+- Fixed seed across frames — no noise shimmer; render determinism holds.
+
 ## Layout
 
 ```
@@ -126,7 +173,7 @@ gpu-soak/      self-judging GPU-vs-CPU soak test
 
 ## Roadmap
 
-- Timeline animation (keyframes, ease curves — the turntable orbit shipped;
+- Timeline animation — SHIPPED (`animation` block + `-anim`; the turntable orbit
   per-property tracks next), volumetric fire/plasma via ray-marched fbm
   fields, particle instancing (rain)
 - Later: WASM shader escape hatch, bevel text, CSG

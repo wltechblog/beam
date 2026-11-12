@@ -1,0 +1,315 @@
+{
+  "version": 1,
+  "camera": {
+    "pos": [
+      0,
+      2.7,
+      -11.8
+    ],
+    "lookAt": [
+      0,
+      1.1,
+      0.1
+    ],
+    "fov": 40
+  },
+  "environment": {
+    "color": [
+      0.4,
+      0.52,
+      0.72
+    ],
+    "ambient": 0.12,
+    "ambientColor": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "sky": [
+      [
+        0.3,
+        0.46,
+        0.78
+      ],
+      [
+        0.62,
+        0.74,
+        0.9
+      ],
+      [
+        0.24,
+        0.27,
+        0.32
+      ]
+    ]
+  },
+  "lights": [
+    {
+      "type": "point",
+      "name": "key",
+      "pos": [
+        -5.0,
+        7.5,
+        -4.0
+      ],
+      "color": [
+        1.0,
+        0.98,
+        0.94
+      ],
+      "intensity": 1.05,
+      "falloff": "none"
+    }
+  ],
+  "materials": {
+    "porcelain": {
+      "type": "matte",
+      "color": [
+        0.93,
+        0.91,
+        0.86
+      ],
+      "diffuse": 0.85
+    },
+    "copper": {
+      "type": "metal",
+      "color": [
+        0.72,
+        0.25,
+        0.1
+      ],
+      "diffuse": 0.15,
+      "specular": 0.5,
+      "roughness": 0.05,
+      "reflectivity": 0.55,
+      "metallic": true
+    },
+    "glass": {
+      "type": "glass",
+      "color": [
+        0.97,
+        0.99,
+        1.0
+      ],
+      "ior": 1.5,
+      "reflectivity": 0.05
+    },
+    "floor": {
+      "type": "matte",
+      "color": [
+        0.78,
+        0.76,
+        0.73
+      ],
+      "diffuse": 0.85,
+      "pattern": {
+        "type": "checker",
+        "colors": [
+          [
+            0.78,
+            0.76,
+            0.73
+          ],
+          [
+            0.15,
+            0.17,
+            0.22
+          ]
+        ],
+        "scale": 1.0
+      }
+    }
+  },
+  "objects": [
+    {
+      "type": "plane",
+      "point": [
+        0,
+        0,
+        0
+      ],
+      "normal": [
+        0,
+        1,
+        0
+      ],
+      "material": "floor"
+    },
+    {
+      "type": "mesh",
+      "name": "teapot",
+      "src": "teapot.obj",
+      "material": "porcelain",
+      "transform": {
+        "translate": [
+          0,
+          0.02,
+          0
+        ]
+      }
+    },
+    {
+      "type": "sphere",
+      "name": "copper",
+      "center": [
+        -2.6,
+        1.05,
+        1.6
+      ],
+      "radius": 1.05,
+      "material": "copper"
+    },
+    {
+      "type": "sphere",
+      "name": "glass",
+      "center": [
+        2.6,
+        1.0,
+        1.4
+      ],
+      "radius": 1.0,
+      "material": "glass"
+    }
+  ],
+  "animation": {
+    "duration": 8,
+    "fps": 30,
+    "tracks": [
+      {
+        "target": "camera",
+        "property": "pos",
+        "keys": [
+          {
+            "t": 0,
+            "value": [
+              0.0,
+              2.7,
+              -11.8
+            ]
+          },
+          {
+            "t": 2,
+            "value": [
+              8.4,
+              2.7,
+              -8.4
+            ]
+          },
+          {
+            "t": 4,
+            "value": [
+              11.8,
+              2.7,
+              0.1
+            ]
+          },
+          {
+            "t": 6,
+            "value": [
+              8.4,
+              2.7,
+              8.6
+            ]
+          },
+          {
+            "t": 8,
+            "value": [
+              0.0,
+              2.7,
+              -11.8
+            ]
+          }
+        ]
+      },
+      {
+        "target": "teapot",
+        "property": "rotate",
+        "ease": "linear",
+        "keys": [
+          {
+            "t": 0,
+            "value": [
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "t": 8,
+            "value": [
+              0,
+              360,
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "target": "copper",
+        "property": "translate",
+        "ease": "smooth",
+        "keys": [
+          {
+            "t": 0,
+            "value": [
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "t": 4,
+            "value": [
+              0.0,
+              0.55,
+              2.2
+            ]
+          },
+          {
+            "t": 8,
+            "value": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "target": "key",
+        "property": "intensity",
+        "ease": "smooth",
+        "keys": [
+          {
+            "t": 0,
+            "value": [
+              1.05
+            ]
+          },
+          {
+            "t": 4,
+            "value": [
+              0.45
+            ]
+          },
+          {
+            "t": 8,
+            "value": [
+              1.05
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "render": {
+    "width": 1280,
+    "height": 720,
+    "samples": 4,
+    "maxDepth": 8,
+    "seed": 7,
+    "exposure": 1.0,
+    "tonemap": "reinhard",
+    "output": "teapot-anim.png"
+  }
+}

@@ -177,3 +177,128 @@ func TestValidationErrorsMessage(t *testing.T) {
 		t.Errorf("error message should list paths: %q", msg)
 	}
 }
+
+// ---- animation validation ----
+
+func animSceneBase() string {
+	return `{
+	  "version": 1,
+	  "camera": {"pos": [0,1,-5], "lookAt": [0,0.8,0], "fov": 50},
+	  "lights": [{"type": "point", "name": "key", "pos": [3,5,-3], "intensity": 1}],
+	  "materials": {"m": {"type": "matte", "color": [0.8,0.2,0.2]}},
+	  "objects": [
+	    {"type": "sphere", "name": "ball", "center": [0,0.8,0], "radius": 0.8, "material": "m"}
+	  ],
+	  "render": {"width": 64, "height": 64, "samples": 1, "seed": 1}
+	}`
+}
+
+func withAnim(base, anim string) string {
+	// splice the animation block in before the closing brace
+	return base[:len(base)-1] + ",\"animation\":" + anim + "}"
+}
+
+func TestValidateAnimOK(t *testing.T) {
+	raw := withAnim(animSceneBase(), `{"duration":2,"fps":12,"tracks":[
+	    {"target":"ball","property":"translate","ease":"smooth",
+	     "keys":[{"t":0,"value":[0,0,0]},{"t":2,"value":[3,0,0]}]},
+	    {"target":"key","property":"intensity",
+	     "keys":[{"t":0,"value":[1]},{"t":2,"value":[0.2]}]},
+	    {"target":"camera","property":"fov",
+	     "keys":[{"t":0,"value":[50]},{"t":2,"value":[35]}]}
+	  ]}`)
+	if _, err := Parse([]byte(raw)); err != nil {
+		t.Fatalf("valid animation rejected: %v", err)
+	}
+}
+
+func TestValidateAnimErrors(t *testing.T) {
+	cases := []struct {
+		name    string
+		anim    string
+		wantSub string
+	}{
+		{"unknown target", `{"duration":1,"tracks":[
+		    {"target":"ghost","property":"translate","keys":[{"t":0,"value":[0,0,0]},{"t":1,"value":[1,0,0]}]}]}`,
+			"unknown target"},
+		{"camera bad property", `{"duration":1,"tracks":[
+		    {"target":"camera","property":"translate","keys":[{"t":0,"value":[0,0,0]},{"t":1,"value":[1,0,0]}]}]}`,
+			"supports properties"},
+		{"light bad property", `{"duration":1,"tracks":[
+		    {"target":"key","property":"rotate","keys":[{"t":0,"value":[0,0,0]},{"t":1,"value":[0,90,0]}]}]}`,
+			"supports properties"},
+		{"unsorted keys", `{"duration":2,"tracks":[
+		    {"target":"ball","property":"translate","keys":[{"t":1,"value":[0,0,0]},{"t":0.5,"value":[1,0,0]}]}]}`,
+			"strictly increasing"},
+		{"too few keys", `{"duration":1,"tracks":[
+		    {"target":"ball","property":"translate","keys":[{"t":0,"value":[0,0,0]}]}]}`,
+			"at least 2"},
+		{"bad arity vec", `{"duration":1,"tracks":[
+		    {"target":"ball","property":"translate","keys":[{"t":0,"value":[0]},{"t":1,"value":[1,0,0]}]}]}`,
+			"3 value component"},
+		{"bad arity scalar", `{"duration":1,"tracks":[
+		    {"target":"key","property":"intensity","keys":[{"t":0,"value":[1,1]},{"t":1,"value":[0.5]}]}]}`,
+			"1 value component"},
+		{"keys exceed duration", `{"duration":1,"tracks":[
+		    {"target":"ball","property":"translate","keys":[{"t":0,"value":[0,0,0]},{"t":2,"value":[1,0,0]}]}]}`,
+			"exceeds animation duration"},
+		{"duplicate track", `{"duration":1,"tracks":[
+		    {"target":"ball","property":"translate","keys":[{"t":0,"value":[0,0,0]},{"t":1,"value":[1,0,0]}]},
+		    {"target":"ball","property":"translate","keys":[{"t":0,"value":[0,0,0]},{"t":1,"value":[2,0,0]}]}]}`,
+			"already animated"},
+		{"bad ease", `{"duration":1,"tracks":[
+		    {"target":"ball","property":"translate","ease":"bounce",
+		     "keys":[{"t":0,"value":[0,0,0]},{"t":1,"value":[1,0,0]}]}]}`,
+			"easeIn | easeOut"},
+		{"zero duration", `{"duration":0,"tracks":[
+		    {"target":"ball","property":"translate","keys":[{"t":0,"value":[0,0,0]},{"t":1,"value":[1,0,0]}]}]}`,
+			"duration"},
+		{"unnamed object target", `{"duration":1,"tracks":[
+		    {"target":"ball2","property":"translate","keys":[{"t":0,"value":[0,0,0]},{"t":1,"value":[1,0,0]}]}]}`,
+			"unknown target"},
+	}
+	for _, c := range cases {
+		raw := withAnim(animSceneBase(), c.anim)
+		_, err := Parse([]byte(raw))
+		if err == nil {
+			t.Errorf("%s: expected error containing %q, got nil", c.name, c.wantSub)
+			continue
+		}
+		if !strings.Contains(err.Error(), c.wantSub) {
+			t.Errorf("%s: error %q does not contain %q", c.name, err.Error(), c.wantSub)
+		}
+	}
+}
+
+func TestValidateAnimDuplicateNames(t *testing.T) {
+	base := `{
+	  "version": 1,
+	  "camera": {"pos": [0,1,-5], "lookAt": [0,0.8,0], "fov": 50},
+	  "lights": [],
+	  "materials": {"m": {"type": "matte", "color": [0.8,0.2,0.2]}},
+	  "objects": [
+	    {"type": "sphere", "name": "dup", "center": [0,0.8,0], "radius": 0.8, "material": "m"},
+	    {"type": "sphere", "name": "dup", "center": [2,0.8,0], "radius": 0.8, "material": "m"}
+	  ],
+	  "render": {"width": 64, "height": 64, "samples": 1, "seed": 1}
+	}`
+	anim := `{"duration":1,"tracks":[
+	    {"target":"dup","property":"translate","keys":[{"t":0,"value":[0,0,0]},{"t":1,"value":[1,0,0]}]}]}`
+	raw := base[:len(base)-1] + ",\"animation\":" + anim + "}"
+	_, err := Parse([]byte(raw))
+	if err == nil || !strings.Contains(err.Error(), "duplicate") {
+		t.Fatalf("expected duplicate-name error, got %v", err)
+	}
+}
+
+func TestValidateAnimDefaults(t *testing.T) {
+	raw := withAnim(animSceneBase(), `{"duration":2,"tracks":[
+	    {"target":"ball","property":"translate","keys":[{"t":0,"value":[0,0,0]},{"t":2,"value":[1,0,0]}]}]}`)
+	s, err := Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Animation.FPS != 30 {
+		t.Fatalf("fps default = %d, want 30", s.Animation.FPS)
+	}
+}

@@ -14,6 +14,35 @@ type Scene struct {
 	Lights      []Light              `json:"lights"`
 	Environment *Environment         `json:"environment,omitempty"`
 	Render      RenderOpts           `json:"render"`
+	// Animation is an optional keyframed timeline. When present,
+	// `beam -anim` renders duration*fps frames, sampling every track at
+	// each frame time. A plain still render ignores it.
+	Animation *Animation `json:"animation,omitempty"`
+}
+
+// Animation is a keyframed timeline. All tracks are sampled independently
+// at each frame time t (seconds); a still render ignores the block.
+type Animation struct {
+	Duration float64 `json:"duration"`      // seconds, > 0
+	FPS      int     `json:"fps,omitempty"` // output framerate (default 30)
+	Tracks   []Track `json:"tracks"`        // >= 1
+}
+
+// Track animates one property of one target over time. Targets are
+// "camera", an object name, or a light name. Each (target, property)
+// pair may appear at most once.
+type Track struct {
+	Target   string `json:"target"`         // "camera" | object name | light name
+	Property string `json:"property"`       // see Validate for the per-kind list
+	Keys     []Key  `json:"keys"`           // >= 2, strictly increasing t
+	Ease     string `json:"ease,omitempty"` // "" | "linear" | "smooth" | "easeIn" | "easeOut" (default linear)
+}
+
+// Key is one keyframe: a time in seconds and the property's value.
+// Vector properties take [x,y,z]; scalar properties take [v].
+type Key struct {
+	T     float64   `json:"t"`
+	Value []float64 `json:"value"`
 }
 
 // Camera is a perspective camera with optional thin-lens depth of field.
@@ -62,9 +91,11 @@ type Transform struct {
 	Scale     []float64 `json:"scale,omitempty"`
 }
 
-// Object is a tagged union of shape kinds.
+// Object is a tagged union of shape kinds. Name is optional; named
+// objects can be targeted by animation tracks.
 type Object struct {
 	Type      string     `json:"type"` // sphere | plane | box | mesh | text
+	Name      string     `json:"name,omitempty"`
 	Material  string     `json:"material,omitempty"`
 	Transform *Transform `json:"transform,omitempty"`
 
@@ -87,9 +118,11 @@ type Object struct {
 	Spacing float64 `json:"spacing,omitempty"` // extra letter spacing (em units)
 }
 
-// Light is a tagged union of light kinds.
+// Light is a tagged union of light kinds. Name is optional; named lights
+// can be targeted by animation tracks.
 type Light struct {
 	Type       string    `json:"type"` // point | directional | spot
+	Name       string    `json:"name,omitempty"`
 	Pos        []float64 `json:"pos,omitempty"`
 	Dir        []float64 `json:"dir,omitempty"`
 	Color      []float64 `json:"color,omitempty"`
@@ -196,6 +229,9 @@ func (s *Scene) ApplyDefaults() {
 	}
 	if s.Render.Samples == 0 {
 		s.Render.Samples = 1
+	}
+	if s.Animation != nil && s.Animation.FPS == 0 {
+		s.Animation.FPS = 30
 	}
 	if s.Render.MaxDepth == 0 {
 		s.Render.MaxDepth = 5

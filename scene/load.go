@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strings"
 )
 
 func normalize3(v []float64) []float64 {
@@ -181,6 +182,11 @@ func (s *Scene) Validate() []ValidationErr {
 		}
 	}
 
+	// Animation
+	if s.Animation != nil {
+		errs = append(errs, s.validateAnimation()...)
+	}
+
 	// Environment
 	if s.Environment != nil {
 		if !v3(s.Environment.Color) {
@@ -238,4 +244,147 @@ func (p *Pattern) validate(path string) *ValidationErr {
 		return &ValidationErr{path + "/type", fmt.Sprintf("unknown pattern type %q (solid | checker | gradient)", p.Type)}
 	}
 	return nil
+}
+
+// animatable properties per target kind
+var (
+	cameraProps = map[string]bool{"pos": true, "lookAt": true, "fov": true, "aperture": true}
+	objectProps = map[string]bool{"translate": true, "rotate": true, "scale": true}
+	lightProps  = map[string]bool{"pos": true, "color": true, "intensity": true}
+)
+
+// animVec returns the vector arity of a property (fov/aperture/intensity
+// are scalar = 1; everything else is a vec3 = 3).
+func animVec(prop string) int {
+	switch prop {
+	case "fov", "aperture", "intensity":
+		return 1
+	}
+	return 3
+}
+
+func (s *Scene) validateAnimation() []ValidationErr {
+	var errs []ValidationErr
+	a := s.Animation
+	add := func(path, msg string, args ...interface{}) {
+		errs = append(errs, ValidationErr{Path: path, Msg: fmt.Sprintf(msg, args...)})
+	}
+	p := "/animation"
+
+	if a.Duration <= 0 {
+		add(p+"/duration", "must be > 0 seconds")
+	}
+	if a.FPS < 0 {
+		add(p+"/fps", "must be >= 0 (0 = default 30)")
+	}
+	if len(a.Tracks) == 0 {
+		add(p+"/tracks", "animation needs at least one track")
+	}
+
+	// Build the name index once: object and light names must be unique
+	// across BOTH kinds (tracks address by bare name).
+	names := map[string]string{} // name -> kind, for error messages
+	for i := range s.Objects {
+		n := s.Objects[i].Name
+		if n == "" {
+			continue
+		}
+		if _, dup := names[n]; dup {
+			add(fmt.Sprintf("/objects/%d", i), "duplicate object name %q — animation targets need unique names", n)
+		}
+		names[n] = "object"
+	}
+	for i := range s.Lights {
+		n := s.Lights[i].Name
+		if n == "" {
+			continue
+		}
+		if _, dup := names[n]; dup {
+			add(fmt.Sprintf("/lights/%d", i), "duplicate light name %q — animation targets need unique names", n)
+		}
+		names[n] = "light"
+	}
+
+	seen := map[string]bool{} // "target/property" -> already tracked
+	for i := range a.Tracks {
+		tr := &a.Tracks[i]
+		tp := fmt.Sprintf("/animation/tracks/%d", i)
+
+		kind := ""
+		switch {
+		case tr.Target == "camera":
+			kind = "camera"
+		case names[tr.Target] == "object":
+			kind = "object"
+		case names[tr.Target] == "light":
+			kind = "light"
+		default:
+			add(tp+"/target", "unknown target %q — use \"camera\" or a named object/light", tr.Target)
+		}
+
+		var allowed map[string]bool
+		switch kind {
+		case "camera":
+			allowed = cameraProps
+		case "object":
+			allowed = objectProps
+		case "light":
+			allowed = lightProps
+		}
+		if allowed != nil {
+			if !allowed[tr.Property] {
+				add(tp+"/property", "target %q (kind %s) supports properties: %s", tr.Target, kind, propList(allowed))
+			}
+		}
+
+		switch tr.Ease {
+		case "", "linear", "smooth", "easeIn", "easeOut":
+		default:
+			add(tp+"/ease", "must be linear | smooth | easeIn | easeOut (default linear)")
+		}
+
+		if len(tr.Keys) < 2 {
+			add(tp+"/keys", "track needs at least 2 keyframes")
+		}
+		prevT := math.Inf(-1)
+		for j := range tr.Keys {
+			k := &tr.Keys[j]
+			kp := fmt.Sprintf("%s/keys/%d", tp, j)
+			if k.T <= prevT {
+				add(kp+"/t", "keyframe times must be strictly increasing (got %v after %v)", k.T, prevT)
+			}
+			prevT = k.T
+			want := animVec(tr.Property)
+			if len(k.Value) != want {
+				add(kp+"/value", "property %q needs %d value component(s)", tr.Property, want)
+			}
+		}
+		if len(tr.Keys) >= 2 {
+			last := tr.Keys[len(tr.Keys)-1].T
+			if last > a.Duration {
+				add(tp+"/keys", "last keyframe t=%v exceeds animation duration %v", last, a.Duration)
+			}
+		}
+
+		if kind != "" && allowed != nil && allowed[tr.Property] {
+			key := tr.Target + "/" + tr.Property
+			if seen[key] {
+				add(tp, "duplicate track: %q is already animated", key)
+			}
+			seen[key] = true
+		}
+	}
+	return errs
+}
+
+// propList renders the allowed properties for an error message.
+func propList(m map[string]bool) string {
+	// fixed order for stable messages
+	var out []string
+	for _, n := range []string{"pos", "lookAt", "fov", "aperture", "translate", "rotate", "scale", "color", "intensity"} {
+		if m[n] {
+			out = append(out, n)
+		}
+	}
+	return strings.Join(out, " | ")
 }

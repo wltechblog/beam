@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -235,5 +236,64 @@ func TestCallRenderMissingScene(t *testing.T) {
 	res := resp["result"].(map[string]interface{})
 	if res["isError"] != true {
 		t.Fatal("expected isError for missing scene")
+	}
+}
+
+// animScene: goodScene + names + a minimal valid animation block.
+const animScene = `{"version":1,"camera":{"pos":[0,1,-5],"lookAt":[0,0.8,0],"fov":50},` +
+	`"materials":{"red":{"type":"matte","color":[0.8,0.1,0.1]}},` +
+	`"objects":[{"type":"sphere","name":"ball","center":[0,0.5,0],"radius":0.5,"material":"red"}],` +
+	`"lights":[{"type":"point","name":"key","pos":[3,5,-3]}],` +
+	`"animation":{"duration":0.5,"fps":10,"tracks":[` +
+	`{"target":"ball","property":"translate","keys":[{"t":0,"value":[0,0,0]},{"t":0.5,"value":[2,0,0]}]},` +
+	`{"target":"key","property":"intensity","keys":[{"t":0,"value":[1]},{"t":0.5,"value":[0.3]}]}]},` +
+	`"render":{"width":64,"height":48,"output":"mcp-test-anim.mp4"}}`
+
+func TestCallRenderAnimate(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("no ffmpeg")
+	}
+	p := newPipe(t)
+	p.send(t, map[string]interface{}{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+		"params": map[string]interface{}{
+			"name": "beam_render",
+			"arguments": map[string]interface{}{
+				"scene":   json.RawMessage(animScene),
+				"animate": true,
+			},
+		},
+	})
+	resp := p.recv(t)
+	res := resp["result"].(map[string]interface{})
+	if res["isError"] == true {
+		t.Fatalf("animate render failed: %v", res)
+	}
+	text := res["content"].([]interface{})[0].(map[string]interface{})["text"].(string)
+	if !strings.Contains(text, "mcp-test-anim.mp4") || !strings.Contains(text, "MP4") {
+		t.Fatalf("unexpected animate output: %s", text)
+	}
+}
+
+func TestCallRenderAnimateWithoutAnimation(t *testing.T) {
+	p := newPipe(t)
+	p.send(t, map[string]interface{}{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+		"params": map[string]interface{}{
+			"name": "beam_render",
+			"arguments": map[string]interface{}{
+				"scene":   json.RawMessage(goodScene),
+				"animate": true,
+			},
+		},
+	})
+	resp := p.recv(t)
+	res := resp["result"].(map[string]interface{})
+	if res["isError"] != true {
+		t.Fatal("animate without an animation block must be an error")
+	}
+	text := res["content"].([]interface{})[0].(map[string]interface{})["text"].(string)
+	if !strings.Contains(text, "no animation") {
+		t.Fatalf("error should explain the missing animation block: %s", text)
 	}
 }

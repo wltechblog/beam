@@ -128,6 +128,8 @@ type renderArgs struct {
 	Output    string          `json:"output"`    // output PNG path (optional)
 	Dir       string          `json:"dir"`       // base dir for mesh/font resolution
 	GPU       bool            `json:"gpu"`       // render on GPU (OpenCL)
+	Animate   bool            `json:"animate"`   // render the animation block to MP4
+	FPS       int             `json:"fps"`       // fps override for animate
 }
 
 func decodeRenderArgs(args map[string]interface{}) (renderArgs, []byte, error) {
@@ -181,6 +183,16 @@ func toolRender(args map[string]interface{}, preview bool) (string, bool) {
 		Output:  ra.Output,
 		Dir:     ra.Dir,
 		GPU:     ra.GPU,
+	}
+	if ra.Animate {
+		if ra.GPU {
+			render.SetGPUHook(gpu.Hook)
+		}
+		video, err := render.RenderTimeline(s, opts, ra.FPS)
+		if err != nil {
+			return "render failed: " + err.Error(), true
+		}
+		return fmt.Sprintf("%s (animation rendered to MP4; duration %.2gs at %d fps)", video, s.Animation.Duration, s.Animation.FPS), false
 	}
 	if ra.GPU {
 		render.SetGPUHook(gpu.Hook)
@@ -295,12 +307,18 @@ func toolSchema() (string, bool) {
 			"lights":      "list of {type: point|directional|spot, pos/dir, color, intensity, angle (spot half-angle)}",
 			"environment": "{color [r,g,b], ambient, sky: [zenith, horizon] colors for gradient background}",
 			"render":      "{width, height, samples (NxN AA grid, max 16), maxDepth (recursion, max 20), seed, exposure, output}",
+			"names":       "objects and lights accept an optional name — required for animation targets",
+			"animation":   "{duration (s), fps, tracks: [{target: 'camera' | object/light name, property, keys: [{t, value}], ease}]} — keyframed timeline; render with animate:true or beam -anim",
+			"anim props":  "camera: pos, lookAt, fov, aperture | objects: translate, rotate (deg XYZ), scale | lights: pos, color, intensity",
+			"anim ease":   "linear (default) | smooth | easeIn | easeOut — applies between keyframes",
 		},
 		"tips": []string{
 			"materials are referenced by name from objects",
 			"use beam_preview first, inspect, adjust, then beam_render",
 			"glass needs ior (1.5 typical); emissive needs power",
 			"fitCheck on beam_validate reports clipping before rendering",
+			"animation: name the objects you want to move, then author tracks — all tracks sample independently at each frame; key at identity at t=0 to keep frame 0 == the still render",
+			"animate:true on beam_render renders the animation block to MP4",
 		},
 	}, "", "  ")
 	return string(b), false
@@ -318,8 +336,11 @@ func toolsList() []map[string]interface{} {
 				"properties": map[string]interface{}{
 					"scene":     map[string]interface{}{"type": "object", "description": "Scene JSON object (preferred over sceneFile)"},
 					"sceneFile": map[string]interface{}{"type": "string", "description": "Path to a scene .json on disk"},
-					"output":    map[string]interface{}{"type": "string", "description": "Output PNG path (default beam-out.png)"},
+					"output":    map[string]interface{}{"type": "string", "description": "Output path (PNG for stills, MP4 when animate)"},
 					"dir":       map[string]interface{}{"type": "string", "description": "Base dir for mesh/font resolution"},
+					"animate":   map[string]interface{}{"type": "boolean", "description": "Render the scene's animation block to an MP4 (requires animation in the scene)"},
+					"fps":       map[string]interface{}{"type": "integer", "description": "FPS override for animate (default: the scene's animation.fps)"},
+					"gpu":       map[string]interface{}{"type": "boolean", "description": "Render on OpenCL GPU (~10x faster)"},
 				},
 			},
 		},

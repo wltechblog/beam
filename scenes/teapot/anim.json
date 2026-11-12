@@ -15,11 +15,11 @@
   },
   "environment": {
     "color": [
-      0.4,
-      0.52,
-      0.72
+      0.02,
+      0.03,
+      0.05
     ],
-    "ambient": 0.12,
+    "ambient": 0.03,
     "ambientColor": [
       1.0,
       1.0,
@@ -27,21 +27,32 @@
     ],
     "sky": [
       [
-        0.3,
-        0.46,
-        0.78
+        0.01,
+        0.015,
+        0.025
       ],
       [
-        0.62,
-        0.74,
-        0.9
+        0.02,
+        0.03,
+        0.05
       ],
       [
-        0.24,
-        0.27,
-        0.32
+        0.01,
+        0.015,
+        0.025
       ]
-    ]
+    ],
+    "media": {
+      "color": [
+        0.05,
+        0.07,
+        0.12
+      ],
+      "distance": 14.0,
+      "samples": 10,
+      "altitude": 2.2,
+      "offset": 1.2
+    }
   },
   "lights": [
     {
@@ -52,14 +63,14 @@
         7.5,
         -4.0
       ],
+      "intensity": 6.0,
+      "radius": 0.35,
       "color": [
         1.0,
-        0.98,
-        0.94
+        0.85,
+        0.65
       ],
-      "intensity": 1.05,
-      "falloff": "none",
-      "radius": 1.6
+      "falloff": "none"
     }
   ],
   "materials": {
@@ -174,7 +185,7 @@
   ],
   "animation": {
     "duration": 8,
-    "fps": 30,
+    "fps": 24,
     "tracks": [
       {
         "target": "camera",
@@ -284,25 +295,50 @@
           {
             "t": 0,
             "value": [
-              -5.0,
-              7.5,
-              -4.0
+              -3.0,
+              3.4,
+              10.0
             ]
           },
           {
             "t": 4,
             "value": [
-              5.0,
-              7.5,
-              -4.0
+              3.0,
+              3.4,
+              10.0
             ]
           },
           {
             "t": 8,
             "value": [
-              -5.0,
-              7.5,
-              -4.0
+              -3.0,
+              3.4,
+              10.0
+            ]
+          }
+        ]
+      },
+      {
+        "target": "key",
+        "property": "radius",
+        "ease": "smooth",
+        "keys": [
+          {
+            "t": 0,
+            "value": [
+              0.35
+            ]
+          },
+          {
+            "t": 4,
+            "value": [
+              2.9
+            ]
+          },
+          {
+            "t": 8,
+            "value": [
+              0.35
             ]
           }
         ]
@@ -310,14 +346,14 @@
     ]
   },
   "render": {
-    "width": 1280,
-    "height": 720,
-    "samples": 4,
-    "maxDepth": 8,
+    "width": 960,
+    "height": 540,
+    "samples": 2,
+    "maxDepth": 5,
     "seed": 7,
     "exposure": 1.0,
-    "tonemap": "reinhard",
-    "output": "teapot-anim.png",
-    "shadowSamples": 6
+    "tonemap": "clip",
+    "output": "teapot-atmos.png",
+    "shadowSamples": 2
   }
 }

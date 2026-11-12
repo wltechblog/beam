@@ -304,3 +304,47 @@ func TestCachingResolverMemoizes(t *testing.T) {
 		t.Fatal("Compile mutated the cached base mesh — frames would drift")
 	}
 }
+
+func TestApplyAnimationRadius(t *testing.T) {
+	// radius track animates the light's area-light radius: mid-frame value
+	// lands exactly, negative keys error, and out-of-span keeps the
+	// authored radius (no extrapolation).
+	s := mustParse(t, animTestScene)
+	tr := scene.Track{
+		Target: "key", Property: "radius", Ease: "linear",
+		Keys: []scene.Key{
+			{T: 1, Value: []float64{0.5}},
+			{T: 3, Value: []float64{2.5}},
+		},
+	}
+	s.Animation.Tracks = []scene.Track{tr}
+	s.Lights[0].Radius = 0.25 // authored value outside the track span
+
+	if err := applyAnimationAt(s, 2); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Lights[0].Radius; got != 1.5 {
+		t.Fatalf("t=2 radius = %v, want 1.5 (midpoint of 0.5->2.5)", got)
+	}
+
+	// before the first key: authored value holds
+	s2 := mustParse(t, animTestScene)
+	s2.Animation.Tracks = []scene.Track{tr}
+	s2.Lights[0].Radius = 0.25
+	if err := applyAnimationAt(s2, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got := s2.Lights[0].Radius; got != 0.25 {
+		t.Fatalf("t=0 radius = %v, want authored 0.25 (no extrapolation)", got)
+	}
+
+	// negative key -> error
+	s3 := mustParse(t, animTestScene)
+	s3.Animation.Tracks = []scene.Track{{
+		Target: "key", Property: "radius",
+		Keys: []scene.Key{{T: 0, Value: []float64{1}}, {T: 1, Value: []float64{-1}}},
+	}}
+	if err := applyAnimationAt(s3, 1); err == nil {
+		t.Fatal("negative radius key must error")
+	}
+}

@@ -309,7 +309,7 @@ func toolSchema() (string, bool) {
 			"render":      "{width, height, samples (NxN AA grid, max 16), maxDepth (recursion, max 20), seed, exposure, output}",
 			"names":       "objects and lights accept an optional name — required for animation targets",
 			"animation":   "{duration (s), fps, tracks: [{target: 'camera' | object/light name, property, keys: [{t, value}], ease}]} — keyframed timeline; render with animate:true or beam -anim",
-			"anim props":  "camera: pos, lookAt, fov, aperture | objects: translate, rotate (deg XYZ), scale | lights: pos, color, intensity",
+			"anim props":  "camera: pos, lookAt, fov, aperture | objects: translate, rotate (deg XYZ), scale | lights: pos, color, intensity, radius (0 = point, >0 = spherical area light — animate for growing/shrinking soft shadows)",
 			"anim ease":   "linear (default) | smooth | easeIn | easeOut — applies between keyframes",
 		},
 		"tips": []string{

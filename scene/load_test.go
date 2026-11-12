@@ -302,3 +302,20 @@ func TestValidateAnimDefaults(t *testing.T) {
 		t.Fatalf("fps default = %d, want 30", s.Animation.FPS)
 	}
 }
+
+func TestValidateAnimLightRadiusTrack(t *testing.T) {
+	// radius is animatable on lights, scalar arity, negative rejected at apply
+	raw := withAnim(animSceneBase(), `{"duration":2,"tracks":[
+	    {"target":"key","property":"radius","ease":"smooth",
+	     "keys":[{"t":0,"value":[0]},{"t":2,"value":[2.0]}]}]}`)
+	if _, err := Parse([]byte(raw)); err != nil {
+		t.Fatalf("valid radius track rejected: %v", err)
+	}
+
+	// wrong arity still caught
+	raw2 := withAnim(animSceneBase(), `{"duration":2,"tracks":[
+	    {"target":"key","property":"radius","keys":[{"t":0,"value":[0,0,0]},{"t":2,"value":[1,1,1]}]}]}`)
+	if _, err := Parse([]byte(raw2)); err == nil {
+		t.Fatal("radius is scalar — vec3 values must be rejected")
+	}
+}

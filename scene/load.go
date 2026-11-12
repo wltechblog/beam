@@ -256,14 +256,14 @@ func (p *Pattern) validate(path string) *ValidationErr {
 var (
 	cameraProps = map[string]bool{"pos": true, "lookAt": true, "fov": true, "aperture": true}
 	objectProps = map[string]bool{"translate": true, "rotate": true, "scale": true}
-	lightProps  = map[string]bool{"pos": true, "color": true, "intensity": true}
+	lightProps  = map[string]bool{"pos": true, "color": true, "intensity": true, "radius": true}
 )
 
-// animVec returns the vector arity of a property (fov/aperture/intensity
-// are scalar = 1; everything else is a vec3 = 3).
+// animVec returns the vector arity of a property (fov/aperture/intensity/
+// radius are scalar = 1; everything else is a vec3 = 3).
 func animVec(prop string) int {
 	switch prop {
-	case "fov", "aperture", "intensity":
+	case "fov", "aperture", "intensity", "radius":
 		return 1
 	}
 	return 3
@@ -387,7 +387,7 @@ func (s *Scene) validateAnimation() []ValidationErr {
 func propList(m map[string]bool) string {
 	// fixed order for stable messages
 	var out []string
-	for _, n := range []string{"pos", "lookAt", "fov", "aperture", "translate", "rotate", "scale", "color", "intensity"} {
+	for _, n := range []string{"pos", "lookAt", "fov", "aperture", "translate", "rotate", "scale", "color", "intensity", "radius"} {
 		if m[n] {
 			out = append(out, n)
 		}

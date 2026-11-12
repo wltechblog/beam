@@ -172,6 +172,11 @@ func applyLightProp(l *scene.Light, prop string, v []float64) error {
 			return fmt.Errorf("intensity went negative (%v) — clamp the keyframes", v[0])
 		}
 		l.Intensity = v[0]
+	case "radius":
+		if v[0] < 0 {
+			return fmt.Errorf("radius went negative (%v) — clamp the keyframes", v[0])
+		}
+		l.Radius = v[0]
 	}
 	return nil
 }

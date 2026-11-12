@@ -130,7 +130,8 @@ the camera, named objects, and named lights. Render it with `-anim` (or
 - **Properties**: camera `pos` / `lookAt` / `fov` / `aperture`; objects
   `translate` / `rotate` / `scale` (the transform channels — a track
   replaces only its own channel, the rest keep their authored values);
-  lights `pos` / `color` / `intensity`.
+  lights `pos` / `color` / `intensity` / `radius` (animate 0 → big for
+  shadows that grow from hard points into soft pools).
 - **Keys**: `{t, value}` with strictly increasing times; vector properties
   take `[x,y,z]`, scalars take `[v]`. Outside the key span the authored
   value holds (no extrapolation).

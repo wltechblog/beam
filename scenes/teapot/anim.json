@@ -58,7 +58,8 @@
         0.94
       ],
       "intensity": 1.05,
-      "falloff": "none"
+      "falloff": "none",
+      "radius": 1.6
     }
   ],
   "materials": {
@@ -277,25 +278,31 @@
       },
       {
         "target": "key",
-        "property": "intensity",
+        "property": "pos",
         "ease": "smooth",
         "keys": [
           {
             "t": 0,
             "value": [
-              1.05
+              -5.0,
+              7.5,
+              -4.0
             ]
           },
           {
             "t": 4,
             "value": [
-              0.45
+              5.0,
+              7.5,
+              -4.0
             ]
           },
           {
             "t": 8,
             "value": [
-              1.05
+              -5.0,
+              7.5,
+              -4.0
             ]
           }
         ]
@@ -310,6 +317,7 @@
     "seed": 7,
     "exposure": 1.0,
     "tonemap": "reinhard",
-    "output": "teapot-anim.png"
+    "output": "teapot-anim.png",
+    "shadowSamples": 6
   }
 }

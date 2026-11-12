@@ -67,7 +67,7 @@ Flags precede the scene path (Go flag package convention).
     {"type": "text", "text": "BEAM", "size": 1.4, "depth": 0.35,
      "material": "chrome", "transform": {"translate": [0, 1.6, -2.5]}}
   ],
-  "lights": [{"type": "point", "pos": [5, 7, -4], "intensity": 1.6}],
+  "lights": [{"type": "point", "pos": [5, 7, -4], "intensity": 1.6, "radius": 1.2}],
   "environment": {"color": [0.04, 0.05, 0.08], "ambient": 0.25},
   "render": {"width": 1280, "height": 720, "samples": 2, "seed": 42}
 }
@@ -79,8 +79,10 @@ Object types: `sphere`, `plane`, `box`, `mesh` (OBJ / STL / GLB), `text`
 Materials: `matte`, `metal` (roughness), `glass` (IOR), `emissive` (power).
 Patterns: `solid`, `checker`, `gradient`.
 
-Lights: `point`, `directional`, `spot`. Camera: perspective with optional
-thin-lens depth of field.
+Lights: `point`, `directional`, `spot`. A point/spot light with `radius` > 0
+becomes a spherical area light — soft shadows, sampled `render.shadowSamples`
+rays per light (default 1). Camera: perspective with optional thin-lens
+depth of field.
 
 ## Import formats
 

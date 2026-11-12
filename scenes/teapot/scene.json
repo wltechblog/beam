@@ -57,7 +57,8 @@
         0.94
       ],
       "intensity": 1.05,
-      "falloff": "none"
+      "falloff": "none",
+      "radius": 1.6
     }
   ],
   "materials": {
@@ -175,6 +176,7 @@
     "seed": 7,
     "exposure": 1.0,
     "tonemap": "reinhard",
-    "output": "teapot.png"
+    "output": "teapot.png",
+    "shadowSamples": 6
   }
 }

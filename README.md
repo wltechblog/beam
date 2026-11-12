@@ -30,10 +30,14 @@ beam [options] scene.json
 
   -preview   fast low-res render (320px wide, 1 sample)
   -q         suppress progress output
-  -o FILE    output path override (default: <scene>.png)
+  -o FILE    output path override (default: <scene>.png; .mp4 for -orbit)
   -fit       pre-render screen-fit check: project object bounds to pixels,
              report coverage/clipping, exit 2 if anything clips
   -gpu       render on GPU (OpenCL; hard-fails with diagnostics if no device)
+  -orbit N   render a 360° turntable orbit video: N frames, camera circling
+             the lookAt target at the scene camera's height/radius; frame 0
+             is the scene's own view; assembled to H.264 MP4 via ffmpeg
+  -fps N     output video framerate for -orbit (default 30)
 ```
 
 Flags precede the scene path (Go flag package convention).
@@ -120,6 +124,7 @@ gpu-soak/      self-judging GPU-vs-CPU soak test
 
 ## Roadmap
 
-- Timeline animation (keyframes, ease curves), volumetric fire/plasma via
-  ray-marched fbm fields, particle instancing (rain)
+- Timeline animation (keyframes, ease curves — the turntable orbit shipped;
+  per-property tracks next), volumetric fire/plasma via ray-marched fbm
+  fields, particle instancing (rain)
 - Later: WASM shader escape hatch, bevel text, CSG

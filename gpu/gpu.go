@@ -19,6 +19,7 @@ import (
 
 	"github.com/wltechblog/beam/geom"
 	"github.com/wltechblog/beam/render"
+	"sync"
 )
 
 //go:embed kernel_math.cl
@@ -325,6 +326,8 @@ func max(a, b int) int {
 	return b
 }
 
+var deviceLineOnce sync.Once
+
 // RenderGPU renders a compiled World on the first available GPU device.
 // double=true selects the bit-exact fp64 path (cl_khr_fp64 required).
 // Returns the RGBA image and wall time of the kernel.
@@ -385,7 +388,12 @@ func RenderGPU(w *render.World, cam *render.Camera, width, height, samples, maxD
 	if double {
 		prec = "fp64"
 	}
-	fmt.Fprintf(os.Stderr, "gpu device: %s (%s)\n", dev.Name, prec)
+	// Once per process: the line answers "which silicon ran this", which
+	// is a process-level question. Orbit renders call RenderGPU once per
+	// frame and must not spam it per frame.
+	deviceLineOnce.Do(func() {
+		fmt.Fprintf(os.Stderr, "gpu device: %s (%s)\n", dev.Name, prec)
+	})
 
 	opts := "-cl-std=CL1.2"
 	if double {

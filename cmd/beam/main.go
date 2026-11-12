@@ -19,7 +19,9 @@ func main() {
 	quiet := flag.Bool("q", false, "suppress progress output")
 	out := flag.String("o", "", "output path override (default: <scene>.png)")
 	fit := flag.Bool("fit", false, "pre-render fit check: project object bounds to screen, report clipping, exit 2 if anything clips")
-	gpuFlag := flag.Bool("gpu", false, "render on GPU (OpenCL; falls back to CPU if unavailable)")
+	gpuFlag := flag.Bool("gpu", false, "render on GPU (OpenCL; hard-fails with diagnostics if no device)")
+	orbit := flag.Int("orbit", 0, "render a 360° turntable orbit video: N frames around the lookAt target")
+	fps := flag.Int("fps", 30, "output video framerate for -orbit")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: beam [options] scene.json\n\noptions:\n")
 		flag.PrintDefaults()
@@ -32,6 +34,18 @@ func main() {
 
 	if *fit {
 		os.Exit(runFitCheck(flag.Arg(0), *out != ""))
+	}
+
+	if *orbit > 0 {
+		if *gpuFlag {
+			render.SetGPUHook(gpu.Hook)
+		}
+		os.Exit(runOrbit(flag.Arg(0), render.Options{
+			Preview: *preview,
+			Quiet:   *quiet,
+			Output:  *out,
+			GPU:     *gpuFlag,
+		}, render.OrbitOpts{Frames: *orbit, FPS: *fps}))
 	}
 
 	start := time.Now()
@@ -80,5 +94,17 @@ func runFitCheck(path string, quiet bool) int {
 	if !report.Fitted {
 		os.Exit(2)
 	}
+	return 0
+}
+
+// runOrbit renders a 360° turntable orbit video of the scene.
+func runOrbit(path string, opts render.Options, orbit render.OrbitOpts) int {
+	start := time.Now()
+	videoPath, err := render.RenderOrbitFile(path, opts, orbit)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "beam:", err)
+		return 1
+	}
+	fmt.Printf("%s (%.1fs)\n", videoPath, time.Since(start).Seconds())
 	return 0
 }

@@ -1,5 +1,7 @@
 # Beam
 
+![Utah teapot scene — 360° orbit](docs/teapot-orbit.gif)
+
 Data-driven 3D scene renderer with an agent-first interface.
 
 Beam renders scenes described as **versioned JSON** — no scripting language, no

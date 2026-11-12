@@ -220,6 +220,45 @@ static khit world_intersect(v3 ro, v3 rd,
 
 typedef struct { v3 ld; bd dist; int ok; } klightdir;
 
+// sample_light_point picks a deterministic point on a spherical light as
+// seen from p, from two uniform RNG draws (concentric disk in angle space,
+// exact port of render/renderer.go sampleLightPoint). Fixed 2-draw order
+// keeps the CPU and GPU RNG streams identical.
+static v3 sample_light_point(v3 lightPos, bd radius, v3 p, bd u1, bd u2) {
+	v3 axis = vsub(lightPos, p);
+	bd dist = sqrt(vdot(axis, axis));
+	v3 axisN = vmuls(axis, 1 / dist);
+
+	bd sinMax = radius / dist;
+	if (sinMax > 1) sinMax = 1;
+	bd omu1 = 1 - u1;
+	if (omu1 < 0) omu1 = 0;
+	bd r = sinMax * sqrt(omu1); // uniform on the angular disk
+	bd phi = 2 * GP_PI * u2;
+	bd dx = r * cos(phi);
+	bd dy = r * sin(phi);
+
+	// stable perpendicular frame
+	v3 ref;
+	if (axisN.x < axisN.y && axisN.x < axisN.z) ref = v3_(1, 0, 0);
+	else if (axisN.y < axisN.z) ref = v3_(0, 1, 0);
+	else ref = v3_(0, 0, 1);
+	v3 u = vnorm(vcross(axisN, ref));
+	v3 v = vcross(axisN, u);
+
+	bd s2 = r * r; // sin(theta)^2 over the full disk radius
+	bd om = 1 - s2;
+	if (om < 0) om = 0;
+	bd cosT = sqrt(om);
+	v3 dirN = vnorm(vadd(vadd(vmuls(axisN, cosT), vmuls(u, dx)), vmuls(v, dy)));
+
+	bd disc = dist * dist * s2;
+	bd rad2 = radius * radius;
+	if (disc > rad2) disc = rad2;
+	bd t = dist * cosT - sqrt(rad2 - disc);
+	return vadd(p, vmuls(dirN, t));
+}
+
 static klightdir light_dir(__global const bd *lPos, __global const bd *lDir,
                            __global const bd *lPar, __global const int *lFlags,
                            int i, v3 p) {
@@ -235,7 +274,7 @@ static klightdir light_dir(__global const bd *lPos, __global const bd *lDir,
 		v3 toL = vsub(v3_(lPos[i*3], lPos[i*3+1], lPos[i*3+2]), p);
 		bd dist = sqrt(vdot(toL, toL));
 		v3 dir = vmuls(toL, 1 / dist);
-		bd cosA = lPar[i * 2 + 1];
+		bd cosA = lPar[i * 4 + 1];
 		if (vdot(dir, vmuls(v3_(lDir[i*3], lDir[i*3+1], lDir[i*3+2]), -1)) < cosA) {
 			r.ok = 0;
 			return r;
@@ -433,7 +472,7 @@ static v3 specular(v3 p, v3 n, v3 viewDir, int m,
 		bd ndoth = vdot(n, h);
 		if (ndoth <= 0) continue;
 		bd atten = light_atten(lPar, lFlags, i, L.dist);
-		bd spec = gp_pow_use(ndoth, sh) * lPar[i * 2] * atten * k;
+		bd spec = gp_pow_use(ndoth, sh) * lPar[i * 4] * atten * k;
 		out = vadd(out, vmuls(vmul(v3_(lCol[i*3], lCol[i*3+1], lCol[i*3+2]), albedo), spec));
 	}
 	return out;

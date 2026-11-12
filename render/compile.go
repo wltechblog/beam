@@ -137,8 +137,10 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 			ld.Kind = 's'
 			ld.CosAngle = cosDeg(l.Angle)
 		}
+		ld.Radius = l.Radius
 		w.Lights = append(w.Lights, ld)
 	}
+	w.ShadowSamples = s.Render.ShadowSamples
 
 	return w, nil
 }

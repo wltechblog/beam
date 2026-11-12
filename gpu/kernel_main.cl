@@ -51,6 +51,7 @@ typedef struct {
 	__global const bd *lPos, *lDir, *lCol, *lPar; // lPar 2: intensity cosAngle
 	__global const int *lFlags;                   // 3: kind noFalloff shadowless
 	int nLights;
+	int shadowSamples; // per-light shadow rays for radius lights (cfg[8])
 	__global const bd *skyStops; // 4/stop: y r g b
 	int nStops;
 	v3 envColor, envTop, envMid, envBot;
@@ -69,7 +70,7 @@ static v3 trace_stack(scenebuf *S, v3 ro, v3 rd, int depth, beam_rng *rng);
 
 // diffuse+shadow loop shared by matte and untinted metal.
 // energyScale multiplies the direct term ((1-reflectivity) for metal, 1 matte).
-static v3 direct_light(scenebuf *S, v3 p, v3 n, v3 albedo, int m, bd diffuseK, bd energyScale) {
+static v3 direct_light(scenebuf *S, v3 p, v3 n, v3 albedo, int m, bd diffuseK, bd energyScale, beam_rng *rng) {
 	v3 out = vmul(albedo, S->ambientColor);
 	out = vmuls(out, S->ambient * energyScale);
 	for (int i = 0; i < S->nLights; i++) {
@@ -77,30 +78,59 @@ static v3 direct_light(scenebuf *S, v3 p, v3 n, v3 albedo, int m, bd diffuseK, b
 		if (!L.ok) continue;
 		bd ndotl = vdot(n, L.ld);
 		if (ndotl <= 0) continue;
+		bd radius = S->lPar[i * 4 + 2];
+		int shadowless = S->lFlags[i * 3 + 2];
 		v3 trans = v3_(1, 1, 1);
-		if (!S->lFlags[i * 3 + 2]) { // shadowless
-			v3 orig = vadd(p, vmuls(n, vdot(L.ld, n) < 0 ? -1e-4 : 1e-4));
-			// shadow march
-			for (int hop = 0; hop < 8; hop++) {
-				khit h = world_intersect(orig, L.ld, S->objA, S->objB, S->objKind, S->objRoot,
-				                         S->objNorms, S->nObjs, S->nodeBMin, S->nodeBMax,
-				                         S->nodeLeft, S->nodeRight, S->nodeCount, S->triV, S->triN);
-				if (!h.hit || h.t >= L.dist) break;
-				// need object matIdx of the hit: recompute via object scan
-				// (world_intersect tracks the winning object index in objWin)
-				int m2 = S->objMat[h.objIdx];
-				if (S->matFlags[m2 * 4 + 0] != 2) { // not glass
-					trans = v3_(0, 0, 0);
-					break;
+		if (!shadowless) {
+			if (radius > 0) {
+				// spherical area light: average shadow rays over jittered
+				// points on the visible sphere (2 rng draws each)
+				int ns = S->shadowSamples;
+				if (ns < 1) ns = 1;
+				v3 acc = v3_(0, 0, 0);
+				v3 lightPos = v3_(S->lPos[i*3], S->lPos[i*3+1], S->lPos[i*3+2]);
+				for (int js = 0; js < ns; js++) {
+					bd u1 = rng_float(rng);
+					bd u2 = rng_float(rng);
+					v3 sp = sample_light_point(lightPos, radius, p, u1, u2);
+					v3 toL = vsub(sp, p);
+					bd sdist = sqrt(vdot(toL, toL));
+					v3 sld = vmuls(toL, 1 / sdist);
+					v3 orig = vadd(p, vmuls(n, vdot(sld, n) < 0 ? -1e-4 : 1e-4));
+					v3 sampleTrans = v3_(1, 1, 1); // unobstructed = full
+					for (int hop = 0; hop < 8; hop++) {
+						khit h = world_intersect(orig, sld, S->objA, S->objB, S->objKind, S->objRoot,
+						                         S->objNorms, S->nObjs, S->nodeBMin, S->nodeBMax,
+						                         S->nodeLeft, S->nodeRight, S->nodeCount, S->triV, S->triN);
+						if (!h.hit || h.t >= sdist) break;
+						int m2 = S->objMat[h.objIdx];
+						if (S->matFlags[m2 * 4 + 0] != 2) { sampleTrans = v3_(0,0,0); break; }
+						v3 alb2 = mat_albedo(S->matAlb, S->matP0, S->matP1, S->matPar, S->matFlags, m2, h.p);
+						sampleTrans = vmuls(vmul(sampleTrans, alb2), 0.85);
+						orig = vadd(h.p, vmuls(sld, 2e-4));
+					}
+					acc = vadd(acc, sampleTrans);
 				}
-				v3 alb2 = mat_albedo(S->matAlb, S->matP0, S->matP1, S->matPar, S->matFlags, m2, h.p);
-				trans = vmuls(vmul(trans, alb2), 0.85);
-				orig = vadd(h.p, vmuls(L.ld, 2e-4));
+				trans = vmuls(acc, 1.0 / (bd)ns);
+			} else {
+				v3 orig = vadd(p, vmuls(n, vdot(L.ld, n) < 0 ? -1e-4 : 1e-4));
+				// shadow march
+				for (int hop = 0; hop < 8; hop++) {
+					khit h = world_intersect(orig, L.ld, S->objA, S->objB, S->objKind, S->objRoot,
+					                         S->objNorms, S->nObjs, S->nodeBMin, S->nodeBMax,
+					                         S->nodeLeft, S->nodeRight, S->nodeCount, S->triV, S->triN);
+					if (!h.hit || h.t >= L.dist) break;
+					int m2 = S->objMat[h.objIdx];
+					if (S->matFlags[m2 * 4 + 0] != 2) { trans = v3_(0, 0, 0); break; }
+					v3 alb2 = mat_albedo(S->matAlb, S->matP0, S->matP1, S->matPar, S->matFlags, m2, h.p);
+					trans = vmuls(vmul(trans, alb2), 0.85);
+					orig = vadd(h.p, vmuls(L.ld, 2e-4));
+				}
 			}
 			if (trans.x <= 0 && trans.y <= 0 && trans.z <= 0) continue;
 		}
 		bd atten = light_atten(S->lPar, S->lFlags, i, L.dist);
-		bd s = ndotl * S->lPar[i * 2] * diffuseK * energyScale * atten;
+		bd s = ndotl * S->lPar[i * 4] * diffuseK * energyScale * atten;
 		v3 lit = vmuls(vmul(albedo, v3_(S->lCol[i*3], S->lCol[i*3+1], S->lCol[i*3+2])), s);
 		out = vadd(out, vmul(lit, trans));
 	}
@@ -121,7 +151,7 @@ static v3 spec_loop(scenebuf *S, v3 p, v3 n, v3 viewDir, int m, v3 tint, bd k) {
 		bd ndoth = vdot(n, h);
 		if (ndoth <= 0) continue;
 		bd atten = light_atten(S->lPar, S->lFlags, i, L.dist);
-		bd spec = gp_pow_use(ndoth, sh) * S->lPar[i * 2] * atten * k;
+		bd spec = gp_pow_use(ndoth, sh) * S->lPar[i * 4] * atten * k;
 		out = vadd(out, vmuls(vmul(v3_(S->lCol[i*3], S->lCol[i*3+1], S->lCol[i*3+2]), tint), spec));
 	}
 	return out;
@@ -156,7 +186,7 @@ static v3 shade_result(scenebuf *S, fframe *f, v3 reflRes, v3 refrRes, int haveR
 		else rOut = vmuls(vmul(reflOut, albedo), refl);
 		v3 out = v3_(0, 0, 0);
 		if (untinted) {
-			out = direct_light(S, p, n, albedo, m, S->matPar[m * 9 + 4], 1 - refl);
+			out = direct_light(S, p, n, albedo, m, S->matPar[m * 9 + 4], 1 - refl, rng);
 		}
 		out = vadd(out, rOut);
 		bd sk = S->matPar[m * 9 + 5];
@@ -166,7 +196,7 @@ static v3 shade_result(scenebuf *S, fframe *f, v3 reflRes, v3 refrRes, int haveR
 	}
 
 	// matte
-	v3 out = direct_light(S, p, n, albedo, m, S->matPar[m * 9 + 4], 1);
+	v3 out = direct_light(S, p, n, albedo, m, S->matPar[m * 9 + 4], 1, rng);
 	bd sk = S->matPar[m * 9 + 5];
 	if (sk > 0) out = vadd(out, spec_loop(S, p, n, viewDir, m, v3_(1, 1, 1), sk));
 	return out;
@@ -365,6 +395,7 @@ __kernel void trace_pixel(__global const int *cfg,      // [0]=W [1]=H [2]=sampl
 	S.nMats = cfg[6];
 	S.lPos = lPos; S.lDir = lDir; S.lCol = lCol; S.lPar = lPar; S.lFlags = lFlags;
 	S.nLights = cfg[7];
+	S.shadowSamples = cfg[8];
 	S.skyStops = skyStops; S.nStops = envFlags[1];
 	S.envColor = v3_(envBuf[0], envBuf[1], envBuf[2]);
 	S.envTop = v3_(envBuf[3], envBuf[4], envBuf[5]);

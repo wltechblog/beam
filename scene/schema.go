@@ -128,9 +128,15 @@ type Light struct {
 	Color      []float64 `json:"color,omitempty"`
 	Intensity  float64   `json:"intensity,omitempty"`
 	Angle      float64   `json:"angle,omitempty"`   // spot half-angle, degrees
+	Radius     float64   `json:"radius,omitempty"`  // spherical light radius; > 0 = soft shadows
 	Falloff    string    `json:"falloff,omitempty"` // "" | "quadratic" (default) | "none"
 	Shadowless bool      `json:"shadowless,omitempty"`
 }
+
+// ShadowSamples is the per-light shadow-ray count for radius lights,
+// read from render.shadowSamples when the light itself doesn't set it.
+// (Lives on RenderOpts so per-light override stays possible later; the
+// light struct above keeps the hot fields ordered.)
 
 // SkyStop is one entry of a piecewise sky gradient keyed by ray dir.Y
 // (1 = zenith, 0 = horizon, -1 = nadir). Colors are linear radiance;
@@ -191,6 +197,11 @@ type RenderOpts struct {
 	Exposure float64 `json:"exposure,omitempty"`
 	Output   string  `json:"output,omitempty"`
 	Tonemap  string  `json:"tonemap,omitempty"` // "" | "reinhard" (default) | "clip" (POV-style)
+
+	// ShadowSamples is the per-light shadow-ray count for spherical area
+	// lights (radius > 0). 0 = 1 (single jittered ray). Higher = smoother
+	// penumbra at linear cost per radius light.
+	ShadowSamples int `json:"shadowSamples,omitempty"`
 
 	// MaxSeconds aborts the render (no PNG written) if it runs longer.
 	// Guards against runaway scenes (huge sample counts, CPU fallbacks).

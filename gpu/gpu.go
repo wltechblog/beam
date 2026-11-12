@@ -83,7 +83,7 @@ type sceneArrays struct {
 	matPar               []float64 // 9/mat
 	matFlags             []int32   // 4/mat
 	lPos, lDir, lCol     []float64 // 3/light
-	lPar                 []float64 // 2/light: intensity, cosAngle
+	lPar                 []float64 // 4/light: intensity, cosAngle, radius, unused
 	lFlags               []int32   // 3/light: kind, noFalloff, shadowless
 	skyStops             []float64 // 4/stop
 	envBuf               []float64 // 17
@@ -203,14 +203,16 @@ func flatten(w *render.World) (bufs sceneArrays) {
 	bufs.lPos = make([]float64, max(l, 1)*3)
 	bufs.lDir = make([]float64, max(l, 1)*3)
 	bufs.lCol = make([]float64, max(l, 1)*3)
-	bufs.lPar = make([]float64, max(l, 1)*2)
+	bufs.lPar = make([]float64, max(l, 1)*4)
 	bufs.lFlags = make([]int32, max(l, 1)*3)
 	for i, lt := range w.Lights {
 		put3(bufs.lPos, i*3, lt.Pos)
 		put3(bufs.lDir, i*3, lt.Dir)
 		put3(bufs.lCol, i*3, lt.Color)
-		bufs.lPar[i*2+0] = lt.Intensity
-		bufs.lPar[i*2+1] = lt.CosAngle
+		bufs.lPar[i*4+0] = lt.Intensity
+		bufs.lPar[i*4+1] = lt.CosAngle
+		bufs.lPar[i*4+2] = lt.Radius
+		bufs.lPar[i*4+3] = 0 // reserved
 		bufs.lFlags[i*3+0] = lightKindNum(lt.Kind)
 		if lt.NoFalloff {
 			bufs.lFlags[i*3+1] = 1
@@ -411,7 +413,8 @@ func RenderGPU(w *render.World, cam *render.Camera, width, height, samples, maxD
 	camSlice := camP[:]
 
 	cfg := []int32{int32(width), int32(height), int32(samples), int32(maxDepth),
-		boolInt(clip), int32(len(w.Objects)), int32(len(w.Materials)), int32(len(w.Lights))}
+		boolInt(clip), int32(len(w.Objects)), int32(len(w.Materials)), int32(len(w.Lights)),
+		int32(w.ShadowSamples)}
 	seedArr := []int64{seed}
 	expArr := []float64{exposure}
 	pix := make([]byte, width*height*4)

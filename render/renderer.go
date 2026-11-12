@@ -308,29 +308,7 @@ func (r *Renderer) shade(ray geom.Ray, hit *geom.Hit, obj *Object3D, depth int, 
 		var out geom.Vec3
 		if mat.Untinted {
 			// matte-style diffuse term scaled by (1 - reflectivity)
-			out = mulV(albedo, r.World.AmbientColor).MulS(r.World.Ambient * (1 - mat.Reflectivity))
-			for i := range r.World.Lights {
-				l := &r.World.Lights[i]
-				ld, dist := lightDir(l, p)
-				if ld == (geom.Vec3{}) {
-					continue
-				}
-				ndotl := n.Dot(ld)
-				if ndotl <= 0 {
-					continue
-				}
-				trans := geom.Vec3{X: 1, Y: 1, Z: 1}
-				if !l.Shadowless {
-					shadowRay := offset(p, n, ld)
-					trans = r.shadowTrans(shadowRay.Orig, ld, dist)
-					if trans.X <= 0 && trans.Y <= 0 && trans.Z <= 0 {
-						continue
-					}
-				}
-				atten := lightAttenuation(l, dist)
-				lit := mulV(albedo, l.Color).MulS(ndotl * l.Intensity * mat.Diffuse * (1 - mat.Reflectivity) * atten)
-				out = out.Add(mulV(lit, trans))
-			}
+			out = r.directLight(p, n, albedo, mat.Diffuse, 1-mat.Reflectivity, rng)
 		}
 		out = out.Add(reflOut)
 		if mat.SpecularK > 0 {
@@ -342,7 +320,23 @@ func (r *Renderer) shade(ray geom.Ray, hit *geom.Hit, obj *Object3D, depth int, 
 	}
 
 	// matte: ambient + direct light with shadows
-	out := mulV(albedo, r.World.AmbientColor).MulS(r.World.Ambient)
+	out := r.directLight(p, n, albedo, mat.Diffuse, 1, rng)
+	if mat.SpecularK > 0 {
+		// POV finish specular: highlight takes light color, NOT pigment tint
+		out = out.Add(r.specular(p, n, ray.Dir.MulS(-1), mat, geom.Vec3{X: 1, Y: 1, Z: 1}, mat.SpecularK))
+	}
+	return out
+}
+
+// directLight computes ambient + the direct-light sum with shadows for a
+// diffuse surface. diffuseK scales the direct term (mat.Diffuse for matte,
+// Diffuse*(1-Reflectivity) for untinted metal). Lights with Radius > 0 are
+// spherical area lights: the shadow term is averaged over shadowSamples
+// jittered points on the visible sphere; other values exactly preserve the
+// historic hard-shadow path. Draw order is fixed (2 RNG draws per jitter)
+// so CPU and GPU streams stay in lockstep.
+func (r *Renderer) directLight(p, n, albedo geom.Vec3, diffuseK, energyScale float64, rng *RNG) geom.Vec3 {
+	out := mulV(albedo, r.World.AmbientColor).MulS(r.World.Ambient * energyScale)
 	for i := range r.World.Lights {
 		l := &r.World.Lights[i]
 		ld, dist := lightDir(l, p)
@@ -353,23 +347,113 @@ func (r *Renderer) shade(ray geom.Ray, hit *geom.Hit, obj *Object3D, depth int, 
 		if ndotl <= 0 {
 			continue
 		}
+
 		trans := geom.Vec3{X: 1, Y: 1, Z: 1}
 		if !l.Shadowless {
-			shadowRay := offset(p, n, ld)
-			trans = r.shadowTrans(shadowRay.Orig, ld, dist)
+			if l.Radius > 0 {
+				nSamples := r.World.ShadowSamples
+				if nSamples < 1 {
+					nSamples = 1
+				}
+				var acc geom.Vec3
+				for js := 0; js < nSamples; js++ {
+					// Deterministic point on the light's visible disk: two
+					// RNG draws -> concentric-map disk sample, projected to
+					// the sphere cap facing p. Fixed draw count keeps the
+					// CPU and GPU RNG streams identical.
+					u1 := rng.Float64()
+					u2 := rng.Float64()
+					sp := sampleLightPoint(l, p, u1, u2)
+					sld, sdist := toLightDir(sp, p)
+					shadowRay := offset(p, n, sld)
+					acc = acc.Add(r.shadowTrans(shadowRay.Orig, sld, sdist))
+				}
+				trans = acc.MulS(1 / float64(nSamples))
+			} else {
+				shadowRay := offset(p, n, ld)
+				trans = r.shadowTrans(shadowRay.Orig, ld, dist)
+			}
 			if trans.X <= 0 && trans.Y <= 0 && trans.Z <= 0 {
 				continue
 			}
 		}
 		atten := lightAttenuation(l, dist)
-		lit := mulV(albedo, l.Color).MulS(ndotl * l.Intensity * mat.Diffuse * atten)
+		lit := mulV(albedo, l.Color).MulS(ndotl * l.Intensity * diffuseK * energyScale * atten)
 		out = out.Add(mulV(lit, trans))
 	}
-	if mat.SpecularK > 0 {
-		// POV finish specular: highlight takes light color, NOT pigment tint
-		out = out.Add(r.specular(p, n, ray.Dir.MulS(-1), mat, geom.Vec3{X: 1, Y: 1, Z: 1}, mat.SpecularK))
-	}
 	return out
+}
+
+// toLightDir returns the unit direction and distance from p to q.
+func toLightDir(q, p geom.Vec3) (geom.Vec3, float64) {
+	d := q.Sub(p)
+	l := d.Len()
+	return d.MulS(1 / l), l
+}
+
+// sampleLightPoint picks a deterministic point on the spherical light l as
+// seen from shading point p, from two uniform RNG draws. u1,u2 -> concentric
+// square->disk map (no rejection loop) -> scaled by the angular radius of the
+// light as seen from p -> rotated into the perpendicular frame around the
+// light direction. The sample lands on the disk through the light CENTER
+// facing p (cap approximation: for realistic light/scene scales the visible
+// disk and the cap differ imperceptibly but the disk keeps the math exact,
+// loop-free and CPU/GPU portable).
+func sampleLightPoint(l *LightDef, p geom.Vec3, u1, u2 float64) geom.Vec3 {
+	// frame around axis p -> light center
+	axis := l.Pos.Sub(p)
+	dist := axis.Len()
+	axisN := axis.MulS(1 / dist)
+
+	// visible angular radius of the sphere
+	sinMax := l.Radius / dist
+	if sinMax > 1 {
+		sinMax = 1
+	}
+	// sample uniformly on the disk of that angular radius (concentric map)
+	// r = sin(theta) gives uniform-on-disk in angle space
+	r := sinMax * sqrtOneMinus(u1) // r = sqrt(1-u1) scaled — uniform disk
+	phi := 2 * math.Pi * u2
+	dx := r * math.Cos(phi)
+	dy := r * math.Sin(phi)
+
+	// perpendicular frame (axisN has one near-zero component; pick the
+	// smallest to build a stable cross)
+	var ref geom.Vec3
+	if axisN.X < axisN.Y && axisN.X < axisN.Z {
+		ref = geom.Vec3{X: 1, Y: 0, Z: 0}
+	} else if axisN.Y < axisN.Z {
+		ref = geom.Vec3{X: 0, Y: 1, Z: 0}
+	} else {
+		ref = geom.Vec3{X: 0, Y: 0, Z: 1}
+	}
+	u := axisN.Cross(ref).Norm()
+	v := axisN.Cross(u)
+
+	// direction from p through the sampled disk point. dir is unit by
+	// construction: axis*cos(theta) + (u cos(phi) + v sin(phi)) * sin(theta)
+	// with sin(theta) = r. The ray's perpendicular offset from the light
+	// center is therefore dist*r (NOT dist*dx) — that sets the secant
+	// discriminant below.
+	cosT := sqrtOneMinus(r * r)
+	dirN := axisN.MulS(cosT).Add(u.MulS(dx)).Add(v.MulS(dy)).Norm()
+	// distance from p to the sphere surface along dirN (near secant root):
+	// t = dist*cosT - sqrt(R^2 - (dist*r)^2)
+	disc := dist * dist * r * r
+	rad2 := l.Radius * l.Radius
+	if disc > rad2 {
+		disc = rad2
+	}
+	t := dist*cosT - math.Sqrt(rad2-disc)
+	return p.Add(dirN.MulS(t))
+}
+
+// sqrtOneMinus(x) = sqrt(1-x) without cancellation near x=1.
+func sqrtOneMinus(x float64) float64 {
+	if x >= 1 {
+		return 0
+	}
+	return math.Sqrt(1 - x)
 }
 
 // glass computes Fresnel-weighted reflection + refraction with TIR.

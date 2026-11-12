@@ -39,7 +39,11 @@ type World struct {
 	Ambient      float64
 	AmbientColor geom.Vec3
 	Lights       []LightDef
-	Fog          *FogDef
+	// ShadowSamples is the per-light shadow-ray count for spherical area
+	// lights (radius > 0); 0 = 1. Set from scene render.shadowSamples at
+	// compile time so both the CPU renderer and the GPU hook see it.
+	ShadowSamples int
+	Fog           *FogDef
 }
 
 // FogDef is compiled fog parameters (exponential + ground-fog falloff).
@@ -73,6 +77,7 @@ type LightDef struct {
 	Color      geom.Vec3
 	Intensity  float64
 	CosAngle   float64 // spot: cosine of half-angle
+	Radius     float64 // spherical light radius; > 0 = soft shadows
 	NoFalloff  bool    // POV default: point lights do not attenuate with distance
 	Shadowless bool    // skip shadow rays (POV shadowless keyword)
 }

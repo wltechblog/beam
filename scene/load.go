@@ -180,6 +180,12 @@ func (s *Scene) Validate() []ValidationErr {
 		if l.Intensity < 0 {
 			add(p+"/intensity", "must be >= 0")
 		}
+		if l.Radius < 0 {
+			add(p+"/radius", "must be >= 0")
+		}
+		if l.Type == "directional" && l.Radius > 0 {
+			add(p+"/radius", "directional lights do not take a radius (yet); use point/spot")
+		}
 	}
 
 	// Animation

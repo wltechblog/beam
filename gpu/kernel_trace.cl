@@ -69,10 +69,11 @@ typedef struct {
 	int front;
 	int tri;
 	int objIdx;
+	bd bu, bv; // barycentric coords of a triangle hit (weights of b and c)
 } khit;
 
 static khit isect_sphere(v3 ro, v3 rd, v3 center, bd radius) {
-	khit h; h.hit = 0; h.tri = -1; h.objIdx = -1;
+	khit h; h.hit = 0; h.tri = -1; h.objIdx = -1; h.bu = 0; h.bv = 0;
 	v3 oc = vsub(ro, center);
 	bd b = vdot(oc, rd);
 	bd c = vdot(oc, oc) - radius * radius;
@@ -91,7 +92,7 @@ static khit isect_sphere(v3 ro, v3 rd, v3 center, bd radius) {
 }
 
 static khit isect_plane(v3 ro, v3 rd, v3 point, v3 normal) {
-	khit h; h.hit = 0; h.tri = -1; h.objIdx = -1;
+	khit h; h.hit = 0; h.tri = -1; h.objIdx = -1; h.bu = 0; h.bv = 0;
 	bd denom = vdot(normal, rd);
 	if (denom > -1e-9 && denom < 1e-9) return h;
 	bd t = vdot(vsub(point, ro), normal) / denom;
@@ -105,7 +106,7 @@ static khit isect_plane(v3 ro, v3 rd, v3 point, v3 normal) {
 }
 
 static khit isect_tri(v3 ro, v3 rd, v3 a, v3 b, v3 c) {
-	khit h; h.hit = 0; h.tri = -1; h.objIdx = -1;
+	khit h; h.hit = 0; h.tri = -1; h.objIdx = -1; h.bu = 0; h.bv = 0;
 	v3 e1 = vsub(b, a);
 	v3 e2 = vsub(c, a);
 	v3 pvec = vcross(rd, e2);
@@ -125,6 +126,7 @@ static khit isect_tri(v3 ro, v3 rd, v3 a, v3 b, v3 c) {
 	h.n = vnorm(vcross(e1, e2));
 	h.front = det > 0;
 	if (!h.front) h.n = vmuls(h.n, -1);
+	h.bu = u; h.bv = v;
 	return h;
 }
 
@@ -202,8 +204,8 @@ static khit world_intersect(v3 ro, v3 rd,
 		}
 	}
 	if (best.hit && bestNorms && best.tri >= 0) {
-		// TriNormal(t, 0.33, 0.33) — matches World.Intersect
-		bd u = 0.33, v = 0.33;
+		// interpolated normal at the actual hit point — matches World.Intersect
+		bd u = best.bu, v = best.bv;
 		bd w = 1 - u - v;
 		int gt = best.tri;
 		v3 n0 = v3_(triN[gt*9+0], triN[gt*9+1], triN[gt*9+2]);

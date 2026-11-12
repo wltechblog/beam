@@ -12,6 +12,7 @@ type Hit struct {
 	N     Vec3 // geometric normal, oriented against the ray
 	Front bool // ray hit the front face
 	Tri   int  // triangle index (mesh objects); -1 otherwise
+	U, V  float64 // barycentric coords of the hit on a triangle (weights of b and c)
 }
 
 // IntersectSphere returns the nearest hit or nil.
@@ -56,7 +57,7 @@ func IntersectPlane(r Ray, point, normal Vec3) *Hit {
 	if !front {
 		n = n.MulS(-1)
 	}
-	return &Hit{T: t, P: p, N: n, Front: front, Tri: -1}
+	return &Hit{T: t, P: p, N: n, Front: front, Tri: -1, U: 0, V: 0}
 }
 
 // Triangle corners a-b-c (counter-clockwise seen from the front).
@@ -89,5 +90,5 @@ func IntersectTriangle(r Ray, a, b, c Vec3) *Hit {
 	if !front {
 		n = n.MulS(-1)
 	}
-	return &Hit{T: t, P: p, N: n, Front: front, Tri: -1}
+	return &Hit{T: t, P: p, N: n, Front: front, Tri: -1, U: u, V: v}
 }

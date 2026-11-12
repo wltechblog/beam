@@ -18,7 +18,8 @@ func (w *World) Intersect(r geom.Ray) (*geom.Hit, *Object3D) {
 		case 'm':
 			h = o.BVH.Intersect(r)
 			if h != nil && len(o.Mesh.Norms) > 0 {
-				h.N = o.Mesh.TriNormal(h.Tri, 0.33, 0.33) // interpolated normal
+				// interpolated normal at the actual hit point
+				h.N = o.Mesh.TriNormal(h.Tri, h.U, h.V)
 			}
 		}
 		if h != nil && (best == nil || h.T < best.T) {

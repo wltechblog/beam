@@ -63,7 +63,102 @@ typedef struct {
 	v3 fogColor;
 	bd fogK, fogAlt, fogOff, fogMax;
 	int fogAtan;
+	// participating media (single scattering). When mediaMode is set the
+	// fogBuf/envFlags slots carry MEDIA parameters instead of fog
+	// (compile.go nils Fog when Media is authored — slots never collide).
+	int mediaMode;   // envFlags[5]
+	int mediaAtan;   // envFlags[3]
+	int mediaSteps;  // envFlags[4]
+	v3 mediaColor;   // fogBuf[0..2]
+	bd mediaK;       // fogBuf[3]
+	bd mediaAlt;     // fogBuf[4]
+	bd mediaOff;     // fogBuf[5]
 } scenebuf;
+
+// ---------- participating media (exact port of renderer.go) ----------
+
+// media_density: unitless density profile at height y. exp profile: 1
+// below Alt, exp falloff above. atan profile: POV ground-fog curve
+// 1/(u^2+1). (CPU mediaDensity handles both; so does this.)
+static bd media_density(bd y, bd alt, bd off, int atanProfile) {
+	if (atanProfile) {
+		if (alt == 0) return 0;
+		bd u = (y - off) / alt;
+		return 1 / (u * u + 1);
+	}
+	if (y <= alt) return 1;
+	if (off > 0) return gp_exp_use(-(y - alt) / off);
+	return 0;
+}
+
+// media_inscatter: direct light at p from every light, geometry-occluded
+// (8-hop glass shadow march) and media-attenuated along the light path.
+// Directional lights skip light-path transmittance (sun-beam semantics).
+static v3 media_inscatter(scenebuf *S, v3 p) {
+	v3 out = v3_(0, 0, 0);
+	for (int i = 0; i < S->nLights; i++) {
+		klightdir L = light_dir(S->lPos, S->lDir, S->lPar, S->lFlags, i, p);
+		if (!L.ok) continue;
+		v3 o = vadd(p, vmuls(L.ld, 1e-4));
+		v3 trans = v3_(1, 1, 1);
+		for (int hop = 0; hop < 8; hop++) {
+			khit h = world_intersect(o, L.ld, S->objA, S->objB, S->objKind, S->objRoot,
+			                         S->objNorms, S->nObjs, S->nodeBMin, S->nodeBMax,
+			                         S->nodeLeft, S->nodeRight, S->nodeCount, S->triV, S->triN);
+			if (!h.hit || h.t >= L.dist) break;
+			int m2 = S->objMat[h.objIdx];
+			if (S->matFlags[m2 * 4 + 0] != 2) { trans = v3_(0, 0, 0); break; }
+			v3 alb2 = mat_albedo(S->matAlb, S->matP0, S->matP1, S->matPar, S->matFlags, m2, h.p);
+			trans = vmuls(vmul(trans, alb2), 0.85);
+			o = vadd(h.p, vmuls(L.ld, 2e-4));
+		}
+		if (trans.x <= 0 && trans.y <= 0 && trans.z <= 0) continue;
+		bd tm = 1;
+		if (S->lFlags[i * 3] != 1) { // not directional
+			tm = gp_exp_use(-S->mediaK * optical_depth(p.y, L.ld.y, L.dist, S->mediaAlt, S->mediaOff, S->mediaAtan));
+		}
+		bd atten = light_atten(S->lPar, S->lFlags, i, L.dist);
+		v3 lc = v3_(S->lCol[i*3], S->lCol[i*3+1], S->lCol[i*3+2]);
+		out = vadd(out, vmuls(vmul(lc, trans), S->lPar[i * 4 + 0] * atten * tm));
+	}
+	return out;
+}
+
+// media_composite: in-scatter accumulates along a deterministic midpoint
+// march (mediaSteps samples, ZERO rng draws — CPU/GPU RNG streams stay
+// identical), surface radiance c attenuated by closed-form transmittance.
+// Includes the 7/K visibility-horizon march cap from the CPU version.
+static v3 media_composite(scenebuf *S, v3 c, v3 orig, v3 dir, bd dist) {
+	if (dist > (bd)100000.0) dist = (bd)100000.0;
+	bd marchDist = dist;
+	bd cap = 7 / S->mediaK;
+	if (marchDist > cap) marchDist = cap;
+	int steps = S->mediaSteps;
+	if (steps < 1) steps = 1;
+	bd step = marchDist / (bd)steps;
+	v3 acc = v3_(0, 0, 0);
+	for (int i = 0; i < steps; i++) {
+		bd tMid = ((bd)i + 0.5) * step;
+		v3 p = vadd(orig, vmuls(dir, tMid));
+		bd sigma = media_density(p.y, S->mediaAlt, S->mediaOff, S->mediaAtan);
+		if (sigma <= 0) continue;
+		bd tTo = gp_exp_use(-S->mediaK * optical_depth(orig.y, dir.y, tMid, S->mediaAlt, S->mediaOff, S->mediaAtan));
+		if (tTo < 1e-4) break; // fully extinguished: later samples cannot contribute
+		bd slice = 1 - gp_exp_use(-S->mediaK * sigma * step);
+		v3 insc = media_inscatter(S, p);
+		acc = vadd(acc, vmuls(vmul(insc, S->mediaColor), tTo * slice));
+	}
+	bd tAll = gp_exp_use(-S->mediaK * optical_depth(orig.y, dir.y, dist, S->mediaAlt, S->mediaOff, S->mediaAtan));
+	return vadd(acc, vmuls(c, tAll));
+}
+
+// apply_atmos dispatches to whichever atmospheric model is authored.
+// Replaces every bare fog_blend call site in trace_stack.
+static v3 apply_atmos(scenebuf *S, v3 c, v3 orig, v3 dir, bd dist) {
+	if (S->mediaMode) return media_composite(S, c, orig, dir, dist);
+	if (S->fogEnabled) return fog_blend(c, orig, dir, dist, S->fogColor, S->fogK, S->fogAlt, S->fogOff, S->fogMax, S->fogAtan);
+	return c;
+}
 
 // forward decls
 static v3 trace_stack(scenebuf *S, v3 ro, v3 rd, int depth, beam_rng *rng);
@@ -126,6 +221,14 @@ static v3 direct_light(scenebuf *S, v3 p, v3 n, v3 albedo, int m, bd diffuseK, b
 					trans = vmuls(vmul(trans, alb2), 0.85);
 					orig = vadd(h.p, vmuls(L.ld, 2e-4));
 				}
+			}
+			// direct light also attenuates through the media layer on
+			// its way to the surface (thick fog dims surfaces).
+			// Directional lights skip it — same sun-beam semantics as
+			// media_inscatter.
+			if (S->mediaMode && S->lFlags[i * 3] != 1) {
+				bd mt = gp_exp_use(-S->mediaK * optical_depth(p.y, L.ld.y, L.dist, S->mediaAlt, S->mediaOff, S->mediaAtan));
+				trans = vmuls(trans, mt);
 			}
 			if (trans.x <= 0 && trans.y <= 0 && trans.z <= 0) continue;
 		}
@@ -219,7 +322,7 @@ static v3 trace_stack(scenebuf *S, v3 ro, v3 rd, int depth, beam_rng *rng) {
 		if (f->phase == PH_ENTER) {
 			if (f->depth <= 0) {
 				res = env_at(f->rd, S->skyStops, S->nStops, S->envColor, S->envTop, S->envMid, S->envBot, S->skyGradient, S->skyCurve);
-				if (S->fogEnabled) res = fog_blend(res, f->ro, f->rd, (bd)100000.0, S->fogColor, S->fogK, S->fogAlt, S->fogOff, S->fogMax, S->fogAtan);
+				res = apply_atmos(S, res, f->ro, f->rd, (bd)100000.0);
 				goto frame_done;
 			}
 			khit h = world_intersect(f->ro, f->rd, S->objA, S->objB, S->objKind, S->objRoot,
@@ -227,7 +330,7 @@ static v3 trace_stack(scenebuf *S, v3 ro, v3 rd, int depth, beam_rng *rng) {
 			                         S->nodeLeft, S->nodeRight, S->nodeCount, S->triV, S->triN);
 			if (!h.hit) {
 				res = env_at(f->rd, S->skyStops, S->nStops, S->envColor, S->envTop, S->envMid, S->envBot, S->skyGradient, S->skyCurve);
-				if (S->fogEnabled) res = fog_blend(res, f->ro, f->rd, (bd)100000.0, S->fogColor, S->fogK, S->fogAlt, S->fogOff, S->fogMax, S->fogAtan);
+				res = apply_atmos(S, res, f->ro, f->rd, (bd)100000.0);
 				goto frame_done;
 			}
 			f->hit = 1; f->t = h.t; f->p = h.p; f->n = h.n; f->front = h.front;
@@ -237,7 +340,7 @@ static v3 trace_stack(scenebuf *S, v3 ro, v3 rd, int depth, beam_rng *rng) {
 			int kind = S->matFlags[f->matIdx * 4 + 0];
 			if (kind == 3) { // emissive
 				res = vmuls(f->albedo, S->matPar[f->matIdx * 9 + 3]);
-				if (S->fogEnabled) res = fog_blend(res, f->ro, f->rd, h.t, S->fogColor, S->fogK, S->fogAlt, S->fogOff, S->fogMax, S->fogAtan);
+				res = apply_atmos(S, res, f->ro, f->rd, h.t);
 				goto frame_done;
 			}
 			if (kind == 1) { // metal
@@ -252,13 +355,13 @@ static v3 trace_stack(scenebuf *S, v3 ro, v3 rd, int depth, beam_rng *rng) {
 					continue;
 				}
 				res = shade_result(S, f, v3_(0, 0, 0), v3_(0, 0, 0), 0, rng);
-				if (S->fogEnabled) res = fog_blend(res, f->ro, f->rd, h.t, S->fogColor, S->fogK, S->fogAlt, S->fogOff, S->fogMax, S->fogAtan);
+				res = apply_atmos(S, res, f->ro, f->rd, h.t);
 				goto frame_done;
 			}
 			if (kind == 2) { // glass
 				if (f->depth <= 1) {
 					res = vmul(S->envColor, f->albedo);
-					if (S->fogEnabled) res = fog_blend(res, f->ro, f->rd, h.t, S->fogColor, S->fogK, S->fogAlt, S->fogOff, S->fogMax, S->fogAtan);
+					res = apply_atmos(S, res, f->ro, f->rd, h.t);
 					goto frame_done;
 				}
 				// Fresnel prep (no RNG)
@@ -284,13 +387,13 @@ static v3 trace_stack(scenebuf *S, v3 ro, v3 rd, int depth, beam_rng *rng) {
 			}
 			// matte
 			res = shade_result(S, f, v3_(0, 0, 0), v3_(0, 0, 0), 0, rng);
-			if (S->fogEnabled) res = fog_blend(res, f->ro, f->rd, h.t, S->fogColor, S->fogK, S->fogAlt, S->fogOff, S->fogMax, S->fogAtan);
+			res = apply_atmos(S, res, f->ro, f->rd, h.t);
 			goto frame_done;
 		}
 
 		if (f->phase == PH_METAL_WAIT) {
 			res = shade_result(S, f, f->childRes, v3_(0, 0, 0), 0, rng);
-			if (S->fogEnabled) res = fog_blend(res, f->ro, f->rd, f->t, S->fogColor, S->fogK, S->fogAlt, S->fogOff, S->fogMax, S->fogAtan);
+			res = apply_atmos(S, res, f->ro, f->rd, f->t);
 			goto frame_done;
 		}
 
@@ -299,7 +402,7 @@ static v3 trace_stack(scenebuf *S, v3 ro, v3 rd, int depth, beam_rng *rng) {
 			bd sin2T = f->out.y;
 			if (sin2T > 1) { // TIR
 				res = vmul(f->reflRes, f->albedo);
-				if (S->fogEnabled) res = fog_blend(res, f->ro, f->rd, f->t, S->fogColor, S->fogK, S->fogAlt, S->fogOff, S->fogMax, S->fogAtan);
+				res = apply_atmos(S, res, f->ro, f->rd, f->t);
 				goto frame_done;
 			}
 			bd cosT = sqrt(1 - sin2T);
@@ -324,7 +427,7 @@ static v3 trace_stack(scenebuf *S, v3 ro, v3 rd, int depth, beam_rng *rng) {
 			v3 alb = f->albedo;
 			v3 spec = spec_loop(S, f->p, f->n, vmuls(f->rd, -1), f->matIdx, alb, fr);
 			res = vadd(vmul(base, alb), spec);
-			if (S->fogEnabled) res = fog_blend(res, f->ro, f->rd, f->t, S->fogColor, S->fogK, S->fogAlt, S->fogOff, S->fogMax, S->fogAtan);
+			res = apply_atmos(S, res, f->ro, f->rd, f->t);
 			goto frame_done;
 		}
 
@@ -409,6 +512,11 @@ __kernel void trace_pixel(__global const int *cfg,      // [0]=W [1]=H [2]=sampl
 	S.fogColor = v3_(fogBuf[0], fogBuf[1], fogBuf[2]);
 	S.fogK = fogBuf[3]; S.fogAlt = fogBuf[4]; S.fogOff = fogBuf[5]; S.fogMax = fogBuf[6];
 	S.fogAtan = envFlags[3];
+	S.mediaMode = envFlags[5];
+	S.mediaAtan = envFlags[3]; // atan flag shares the slot (fog+media never both set)
+	S.mediaSteps = envFlags[4];
+	S.mediaColor = S.fogColor;
+	S.mediaK = S.fogK; S.mediaAlt = S.fogAlt; S.mediaOff = S.fogOff;
 
 	// camera — basis computed on host, bit-identical
 	v3 orig = v3_(cam[0], cam[1], cam[2]);

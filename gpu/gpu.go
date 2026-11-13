@@ -240,7 +240,7 @@ func flatten(w *render.World) (bufs sceneArrays) {
 	bufs.envBuf[13] = w.Ambient
 	put3(bufs.envBuf, 14, w.AmbientColor)
 
-	bufs.envFlags = make([]int32, 4)
+	bufs.envFlags = make([]int32, 6)
 	if w.SkyGradient {
 		bufs.envFlags[0] = 1
 	}
@@ -251,14 +251,24 @@ func flatten(w *render.World) (bufs sceneArrays) {
 			bufs.envFlags[3] = 1
 		}
 	}
-
-	bufs.fogBuf = make([]float64, 7)
-	if w.Fog != nil {
-		put3(bufs.fogBuf, 0, w.Fog.Color)
-		bufs.fogBuf[3] = w.Fog.K
-		bufs.fogBuf[4] = w.Fog.Alt
-		bufs.fogBuf[5] = w.Fog.Off
-		bufs.fogBuf[6] = w.Fog.Max
+	if w.Media != nil {
+		// Media replaces fog (compile.go nils Fog when both authored) —
+		// ride the same fogBuf/envFlags slots; envFlags[5] flips the
+		// kernel into media mode, envFlags[4] carries the march steps.
+		bufs.envFlags[5] = 1
+		if w.Media.Atan {
+			bufs.envFlags[3] = 1
+		}
+		steps := w.Media.Steps
+		if steps < 1 {
+			steps = 1
+		}
+		bufs.envFlags[4] = int32(steps)
+		bufs.fogBuf = make([]float64, 7)
+		put3(bufs.fogBuf, 0, w.Media.Color)
+		bufs.fogBuf[3] = w.Media.K
+		bufs.fogBuf[4] = w.Media.Alt
+		bufs.fogBuf[5] = w.Media.Off
 	}
 	return bufs
 }

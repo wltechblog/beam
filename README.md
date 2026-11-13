@@ -20,7 +20,9 @@ given the schema).
 3. **CPU + GPU** — the tile scheduler renders on all cores; the OpenCL path
    (Intel Arc) renders the same scene ~11× faster with fp32 parity (mean
    byte diff 0.00 on the benchmark scene). The JSON layer, scheduler, and
-   output pipeline are identical either way.
+   output pipeline are identical either way. Participating media (single
+   scattering) runs on both paths — the deterministic midpoint march is
+   RNG-free, so CPU/GPU stay in lockstep (~48× faster on GPU).
 4. **Zero heavy dependencies** — stdlib + pure-Go libraries only (glTF
    loader, font outline reader). The single CGO surface is the optional
    OpenCL GPU path; everything else builds pure-Go.

@@ -256,6 +256,7 @@ type cachingResolver struct {
 	inner    MeshResolver
 	mesh     map[string]*geom.TriangleMesh
 	textures map[string]*asset.Texture
+	models   map[string]*asset.LoadedModel
 }
 
 func (c *cachingResolver) LoadMesh(src string) (*geom.TriangleMesh, error) {
@@ -294,6 +295,30 @@ func (c *cachingResolver) LoadTexture(path string) (*asset.Texture, error) {
 	}
 	c.textures[path] = t
 	return t, nil
+}
+
+// LoadModel memoizes imported models (glTF/GLB) by src — same policy as
+// meshes and textures. Compile clones before recentering/transforming
+// (compileModel allocates fresh Verts per part), so per-frame reuse is
+// safe. Without this, animated scenes with model objects fail at frame
+// 0 — the wrapper is the resolver Compile actually sees on the anim path.
+func (c *cachingResolver) LoadModel(src string) (*asset.LoadedModel, error) {
+	if m, ok := c.models[src]; ok {
+		return m, nil
+	}
+	mr, ok := c.inner.(ModelResolver)
+	if !ok {
+		return nil, fmt.Errorf("model %q: resolver cannot import models", src)
+	}
+	m, err := mr.LoadModel(src)
+	if err != nil {
+		return nil, err
+	}
+	if c.models == nil {
+		c.models = map[string]*asset.LoadedModel{}
+	}
+	c.models[src] = m
+	return m, nil
 }
 
 func (c *cachingResolver) TextMesh(text, font string, size, depth, spacing float64) (*geom.TriangleMesh, error) {

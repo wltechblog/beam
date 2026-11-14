@@ -114,10 +114,18 @@ func (r *Renderer) renderTile(img *image.RGBA, row, col, size int) {
 	}
 }
 
-// envAt returns environment radiance for a miss direction: flat color
-// or a gradient on dir.Y. With a horizon stop (EnvMid), the ramp is
-// zenith → horizon for dir.Y > 0 and horizon → below for dir.Y < 0.
+// envAt returns environment radiance for a miss direction: env map (if
+// loaded), else flat color, else a gradient on dir.Y. With a horizon stop
+// (EnvMid), the ramp is zenith → horizon for dir.Y > 0 and horizon → below
+// for dir.Y < 0.
 func (r *Renderer) envAt(dir geom.Vec3) geom.Vec3 {
+	if m := r.World.EnvMap; m != nil {
+		c := m.SampleDir(dir)
+		if s := r.World.EnvScale; s != 0 && s != 1 {
+			c = c.MulS(s)
+		}
+		return c
+	}
 	if len(r.World.SkyStops) >= 2 {
 		return skyMapAt(r.World.SkyStops, dir.Y)
 	}

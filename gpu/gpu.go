@@ -296,7 +296,7 @@ func flatten(w *render.World) (bufs sceneArrays) {
 		bufs.skyStops = make([]float64, 4) // dummy; nStops=0
 	}
 
-	bufs.envBuf = make([]float64, 17)
+	bufs.envBuf = make([]float64, 18)
 	put3(bufs.envBuf, 0, w.EnvColor)
 	put3(bufs.envBuf, 3, w.EnvTop)
 	put3(bufs.envBuf, 6, w.EnvMid)
@@ -304,12 +304,21 @@ func flatten(w *render.World) (bufs sceneArrays) {
 	bufs.envBuf[12] = w.SkyCurve
 	bufs.envBuf[13] = w.Ambient
 	put3(bufs.envBuf, 14, w.AmbientColor)
+	if w.EnvScale != 0 {
+		bufs.envBuf[17] = w.EnvScale
+	} else {
+		bufs.envBuf[17] = 1
+	}
 
-	bufs.envFlags = make([]int32, 6)
+	bufs.envFlags = make([]int32, 7)
 	if w.SkyGradient {
 		bufs.envFlags[0] = 1
 	}
 	bufs.envFlags[1] = int32(len(w.SkyStops))
+	if w.EnvTexIdx >= 0 {
+		// +1 so 0 means "no map" (flag defaults to 0)
+		bufs.envFlags[6] = int32(w.EnvTexIdx) + 1
+	}
 	if w.Fog != nil {
 		bufs.envFlags[2] = 1
 		if w.Fog.Atan {

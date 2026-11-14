@@ -297,6 +297,27 @@ func (c *cachingResolver) LoadTexture(path string) (*asset.Texture, error) {
 	return t, nil
 }
 
+// LoadEnvMap memoizes env maps by path — same policy as textures. Keeps
+// animated envMap scenes from re-decoding the HDR every frame.
+func (c *cachingResolver) LoadEnvMap(path string) (*asset.Texture, error) {
+	if t, ok := c.textures[path]; ok {
+		return t, nil
+	}
+	er, ok := c.inner.(EnvMapResolver)
+	if !ok {
+		return nil, fmt.Errorf("envMap %q: resolver cannot load env maps", path)
+	}
+	t, err := er.LoadEnvMap(path)
+	if err != nil {
+		return nil, err
+	}
+	if c.textures == nil {
+		c.textures = map[string]*asset.Texture{}
+	}
+	c.textures[path] = t
+	return t, nil
+}
+
 // LoadModel memoizes imported models (glTF/GLB) by src — same policy as
 // meshes and textures. Compile clones before recentering/transforming
 // (compileModel allocates fresh Verts per part), so per-frame reuse is

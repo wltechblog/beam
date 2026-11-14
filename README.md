@@ -26,6 +26,9 @@ given the schema).
 4. **Zero heavy dependencies** — stdlib + pure-Go libraries only (glTF
    loader, font outline reader). The single CGO surface is the optional
    OpenCL GPU path; everything else builds pure-Go.
+5. **HDRI environment maps** — equirectangular .hdr (Radiance) or LDR
+   images light the scene and paint backgrounds via
+   environment envMap + envScale; ambient tint follows the map mean.
 
 ## CLI
 

@@ -13,8 +13,9 @@ import (
 // objects are resolved through the MeshResolver (nil resolver skips them).
 func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 	w := &World{
-		EnvColor: rgb(envColor(s)),
-		Ambient:  0.2,
+		EnvTexIdx: -1, // no env map until one loads (0 would alias texture slot 0)
+		EnvColor:  rgb(envColor(s)),
+		Ambient:   0.2,
 	}
 	w.AmbientColor = w.EnvColor
 	if s.Environment != nil && s.Environment.Ambient > 0 {
@@ -283,6 +284,30 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 		w.Lights = append(w.Lights, ld)
 	}
 	w.ShadowSamples = s.Render.ShadowSamples
+
+	// Environment map (optional). Loaded through EnvMapResolver; ride the
+	// same Textures table as albedo maps so the GPU upload is shared.
+	// Ambient tint follows the map mean when ambientColor is not set —
+	// image-based-lighting-lite.
+	if s.Environment != nil && s.Environment.EnvMap != "" {
+		if er, ok := resolver.(EnvMapResolver); ok {
+			t, err := er.LoadEnvMap(s.Environment.EnvMap)
+			if err != nil {
+				return nil, fmt.Errorf("envMap %q: %w", s.Environment.EnvMap, err)
+			}
+			w.EnvMap = t
+			w.Textures = append(w.Textures, t) // EnvTexIdx must equal this slot
+			w.EnvTexIdx = len(w.Textures) - 1
+			if s.Environment.EnvScale > 0 {
+				w.EnvScale = s.Environment.EnvScale
+			} else {
+				w.EnvScale = 1
+			}
+			if len(s.Environment.AmbientColor) != 3 {
+				w.AmbientColor = t.MeanColor()
+			}
+		}
+	}
 
 	return w, nil
 }

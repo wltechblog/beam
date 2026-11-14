@@ -70,6 +70,8 @@ typedef struct {
 	v3 envColor, envTop, envMid, envBot;
 	int skyGradient;
 	bd skyCurve;
+	int envTex;    // texture index +1 of env map; 0 = none (envFlags[6])
+	bd envScale;   // radiance multiplier (envBuf[17])
 	bd ambient;
 	v3 ambientColor;
 	int fogEnabled;
@@ -87,6 +89,64 @@ typedef struct {
 	bd mediaAlt;     // fogBuf[4]
 	bd mediaOff;     // fogBuf[5]
 } scenebuf;
+
+// env_sample: equirectangular env-map lookup — EXACT port of the CPU
+// Texture.SampleDir (asset/hdr.go). u = atan2(x,z)/2π+0.5 (seam at z<0,
+// +Z = image center, wraps), v = acos(clamp(y))/π (v=0 zenith = image
+// TOP row). Bilinear, horizontal wrap, vertical clamp. RNG-free.
+static v3 env_sample(scenebuf *S, v3 dir) {
+	if (S->envTex <= 0) {
+		// No env map — full legacy chain (stops -> gradient -> flat),
+		// identical to the old env_at call this replaced.
+		return env_at(dir, S->skyStops, S->nStops, S->envColor, S->envTop, S->envMid, S->envBot, S->skyGradient, S->skyCurve);
+	}
+	int texIdx = S->envTex - 1;
+	int w = S->texInfo[texIdx * 4 + 0];
+	int h = S->texInfo[texIdx * 4 + 1];
+	int off = S->texInfo[texIdx * 4 + 2];
+	if (w <= 0 || h <= 0) return S->envColor;
+	bd u;
+	if (dir.z == 0) {
+		u = (dir.x >= 0) ? 0.75 : 0.25; // atan2(±x, 0) = ±π/2
+	} else {
+		// atan2(x,z) from atan: |ratio| ∈ [0,π/2), flip to 2nd/3rd quadrant
+		// when z<0, mirror when x<0 — plain atan(x/z) mirrors the map at z<0.
+		bd a = gp_atan_use(fabs(dir.x / dir.z));
+		if (dir.z < 0) a = (bd)GP_PI - a;
+		if (dir.x < 0) a = -a;
+		u = a / (2 * (bd)GP_PI) + 0.5;
+	}
+	u = u - floor(u);
+	bd v;
+	if (dir.y >= 1) v = 0;
+	else if (dir.y <= -1) v = 1;
+	else v = ( (bd)GP_PI / 2 - gp_atan_use(dir.y / sqrt(1 - dir.y * dir.y)) ) / (bd)GP_PI; // acos(y) via atan
+
+	bd fx = u * (bd)w - 0.5;
+	bd fy = v * (bd)h - 0.5;
+	int x0 = (int)floor(fx); int y0 = (int)floor(fy);
+	bd tx = fx - (bd)x0;
+	bd ty = fy - (bd)y0;
+	x0 = ((x0 % w) + w) % w; int x1 = (x0 + 1) % w;
+	if (y0 < 0) y0 = 0; if (y0 > h - 1) y0 = h - 1;
+	int y1 = y0 + 1; if (y1 > h - 1) y1 = h - 1;
+
+	v3 p00 = v3_(S->texPix[off + (y0 * w + x0) * 3 + 0], S->texPix[off + (y0 * w + x0) * 3 + 1], S->texPix[off + (y0 * w + x0) * 3 + 2]);
+	v3 p10 = v3_(S->texPix[off + (y0 * w + x1) * 3 + 0], S->texPix[off + (y0 * w + x1) * 3 + 1], S->texPix[off + (y0 * w + x1) * 3 + 2]);
+	v3 p01 = v3_(S->texPix[off + (y1 * w + x0) * 3 + 0], S->texPix[off + (y1 * w + x0) * 3 + 1], S->texPix[off + (y1 * w + x0) * 3 + 2]);
+	v3 p11 = v3_(S->texPix[off + (y1 * w + x1) * 3 + 0], S->texPix[off + (y1 * w + x1) * 3 + 1], S->texPix[off + (y1 * w + x1) * 3 + 2]);
+	bd w00 = (1 - tx) * (1 - ty);
+	bd w10 = tx * (1 - ty);
+	bd w01 = (1 - tx) * ty;
+	bd w11 = tx * ty;
+	v3 c = v3_(p00.x*w00 + p10.x*w10 + p01.x*w01 + p11.x*w11,
+	           p00.y*w00 + p10.y*w10 + p01.y*w01 + p11.y*w11,
+	           p00.z*w00 + p10.z*w10 + p01.z*w01 + p11.z*w11);
+	bd sc = S->envScale;
+	if (sc != 0 && sc != 1) c = vmuls(c, sc);
+	return c;
+}
+
 
 
 // len_check: textured-material-on-untextured-mesh guard. A mesh without
@@ -434,7 +494,7 @@ static v3 trace_stack(scenebuf *S, v3 ro, v3 rd, int depth, beam_rng *rng) {
 
 		if (f->phase == PH_ENTER) {
 			if (f->depth <= 0) {
-				res = env_at(f->rd, S->skyStops, S->nStops, S->envColor, S->envTop, S->envMid, S->envBot, S->skyGradient, S->skyCurve);
+				res = env_sample(S, f->rd);
 				res = apply_atmos(S, res, f->ro, f->rd, (bd)100000.0);
 				goto frame_done;
 			}
@@ -442,7 +502,7 @@ static v3 trace_stack(scenebuf *S, v3 ro, v3 rd, int depth, beam_rng *rng) {
 			                         S->objNorms, S->nObjs, S->nodeBMin, S->nodeBMax,
 			                         S->nodeLeft, S->nodeRight, S->nodeCount, S->triV, S->triN);
 			if (!h.hit) {
-				res = env_at(f->rd, S->skyStops, S->nStops, S->envColor, S->envTop, S->envMid, S->envBot, S->skyGradient, S->skyCurve);
+				res = env_sample(S, f->rd);
 				res = apply_atmos(S, res, f->ro, f->rd, (bd)100000.0);
 				goto frame_done;
 			}
@@ -657,6 +717,8 @@ __kernel void trace_pixel(__global const int *cfg,      // [0]=W [1]=H [2]=sampl
 	S.envBot = v3_(envBuf[9], envBuf[10], envBuf[11]);
 	S.skyGradient = envFlags[0];
 	S.skyCurve = envBuf[12];
+	S.envTex = envFlags[6];      // texture index +1; 0 = no env map
+	S.envScale = envBuf[17];
 	S.ambient = envBuf[13];
 	S.ambientColor = v3_(envBuf[14], envBuf[15], envBuf[16]);
 	S.fogEnabled = envFlags[2];

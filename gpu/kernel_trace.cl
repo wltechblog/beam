@@ -427,6 +427,8 @@ static v3 env_at(v3 dir, __global const bd *stops, int nStops,
 	return vadd(bot, vmuls(vsub(top, bot), t));
 }
 
+
+
 static v3 fog_blend(v3 c, v3 orig, v3 dir, bd dist,
                     v3 fogColor, bd fogK, bd fogAlt, bd fogOff, bd fogMax, int fogAtan) {
 	bd od = optical_depth(orig.y, dir.y, dist, fogAlt, fogOff, fogAtan);

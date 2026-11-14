@@ -186,6 +186,14 @@ type Environment struct {
 	// <1 keeps the zenith color closer to the horizon (POV-style skies
 	// that stay blue low down); >1 concentrates change near the horizon.
 	SkyCurve float64 `json:"skyCurve,omitempty"`
+	// EnvMap is an equirectangular environment map (.hdr Radiance or
+	// .png/.jpg LDR) that REPLACES the flat/gradient sky for miss rays
+	// and reflections — real image-based lighting backgrounds. The map's
+	// mean color also tints ambient when ambientColor is not set.
+	EnvMap string `json:"envMap,omitempty"`
+	// EnvScale multiplies env map radiance (exposure headroom for HDR
+	// maps: values > 1 brighten, < 1 dim). Default 1.
+	EnvScale float64 `json:"envScale,omitempty"`
 }
 
 // Fog describes exponential distance fog with optional ground-fog height

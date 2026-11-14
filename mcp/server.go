@@ -306,7 +306,7 @@ func toolSchema() (string, bool) {
 			"model":       "src: glTF/GLB path — full import: PBR materials, embedded textures, node transforms; scaleHint (longest bbox edge in world units), materialOverride (replace all part materials with a named scene material)",
 			"text":        "text, size (em height world units), depth (extrusion), font (regular|bold|serif|mono|path.ttf), spacing (em)",
 			"lights":      "list of {type: point|directional|spot, pos/dir, color, intensity, angle (spot half-angle)}",
-			"environment": "{color [r,g,b], ambient, sky: [zenith, horizon] colors for gradient background}",
+			"environment": "{color [r,g,b], ambient, sky: [zenith, horizon] colors for gradient background, envMap: 'file.hdr' equirectangular environment map (Radiance .hdr or LDR image; overrides sky/gradient when set), envScale: multiplier (default 1; dark captures often need 10-100)}",
 			"render":      "{width, height, samples (NxN AA grid, max 16), maxDepth (recursion, max 20), seed, exposure, output}",
 			"names":       "objects and lights accept an optional name — required for animation targets",
 			"animation":   "{duration (s), fps, tracks: [{target: 'camera' | object/light name, property, keys: [{t, value}], ease}]} — keyframed timeline; render with animate:true or beam -anim",

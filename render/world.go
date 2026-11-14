@@ -32,6 +32,13 @@ type ModelResolver interface {
 	LoadModel(src string) (*asset.LoadedModel, error)
 }
 
+// EnvMapResolver is implemented by resolvers that can load equirectangular
+// environment maps (.hdr Radiance / .png/.jpg LDR). Compile type-asserts;
+// scenes degrade to the flat/gradient sky when absent.
+type EnvMapResolver interface {
+	LoadEnvMap(path string) (*asset.Texture, error)
+}
+
 // World is the compiled scene: objects, materials, lights, environment.
 // SkyStop is one entry of the piecewise sky gradient (dir.Y keyed).
 type SkyStop struct {
@@ -61,7 +68,14 @@ type World struct {
 	// lights (radius > 0); 0 = 1. Set from scene render.shadowSamples at
 	// compile time so both the CPU renderer and the GPU hook see it.
 	ShadowSamples int
-	Fog           *FogDef
+	// EnvMap is the compiled equirectangular environment map; nil = use
+	// flat/gradient sky. Rides the same Textures table as albedo maps so
+	// the GPU upload is shared (EnvTexIdx is its index, -1 = none).
+	EnvMap    *asset.Texture
+	EnvTexIdx int
+	// EnvScale multiplies env map radiance (HDR exposure headroom).
+	EnvScale float64
+	Fog      *FogDef
 	// Media replaces Fog when set: extinction + single scattering.
 	Media *MediaDef
 }

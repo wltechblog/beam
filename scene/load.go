@@ -199,8 +199,14 @@ func (s *Scene) Validate() []ValidationErr {
 
 	// Environment
 	if s.Environment != nil {
-		if !v3(s.Environment.Color) {
+		hasEnvMap := s.Environment.EnvMap != ""
+		if !v3(s.Environment.Color) && !hasEnvMap {
+			// color stays required for flat/gradient skies; envMap scenes
+			// may omit it (fallback default applies below the horizon)
 			add("/environment/color", "must be [r,g,b]")
+		}
+		if s.Environment.EnvScale < 0 {
+			add("/environment/envScale", "must be >= 0")
 		}
 		if s.Environment.Ambient < 0 {
 			add("/environment/ambient", "must be >= 0")

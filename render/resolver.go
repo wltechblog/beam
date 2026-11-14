@@ -88,3 +88,9 @@ func (fr *FileResolver) font(name string) string {
 func (fr *FileResolver) LoadTexture(path string) (*asset.Texture, error) {
 	return asset.LoadTexture(fr.resolve(path))
 }
+
+// LoadEnvMap loads an equirectangular environment map (.hdr Radiance or
+// LDR image) relative to the scene dir.
+func (fr *FileResolver) LoadEnvMap(path string) (*asset.Texture, error) {
+	return asset.LoadEnvMap(fr.resolve(path))
+}

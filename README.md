@@ -76,7 +76,7 @@ Flags precede the scene path (Go flag package convention).
 }
 ```
 
-Object types: `sphere`, `plane`, `box`, `mesh` (OBJ / STL / GLB), `text`
+Object types: `sphere`, `plane`, `box`, `mesh` (OBJ / STL), `model` (glTF/GLB — PBR materials, embedded textures, node transforms), `text`
 (3D extruded TrueType, embedded default font).
 
 Materials: `matte`, `metal` (roughness), `glass` (IOR), `emissive` (power).
@@ -90,6 +90,7 @@ depth of field.
 ## Import formats
 
 - **OBJ + MTL** (v, vt, vn, f — full v/vt/vn corner welding with UV-seam splitting; usemtl → auto-materials)
+- **glTF/GLB models** — `{type: "model", src: "x.glb", scaleHint: 2}` imports PBR metallic-roughness materials (metals → tinted conductors, roughness → reflectivity), embedded bufferView textures, and nested node TRS transforms. Emissive-only materials become beam emitters; emissive-with-PBR renders shaded.
 - **Textures** — PNG/JPEG albedo maps (`"map": "wood.png"` on a material; sampled at mesh UVs, bilinear, wrap addressing, sRGB→linear). Planes texture automatically via planar world-space mapping. Multiplies `color` (white = map as authored). CPU today; GPU port next.
 - **STL** (binary + ASCII)
 - **glTF 2.0 / GLB** via `qmuntal/gltf` (positions/indices/normals)

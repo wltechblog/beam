@@ -209,6 +209,17 @@ func compileGLTFMaterial(gm *gltf.Material, lm *asset.LoadedModel, textures *[]*
 	}
 
 	if metallic >= 0.5 {
+		if roughness >= 0.9 {
+			// A fully-rough conductor scatters like a diffuse surface —
+			// glTF spec defaults (metallic 1, roughness 1) hit this when a
+			// material omits both factors. A roughness-1 beam metal is a
+			// hemisphere-scattering mirror that samples fog/glow from every
+			// direction and reads as washed-out white. Dark textured matte
+			// is what the surface actually looks like.
+			cm.Kind = 'm'
+			cm.Albedo = cm.Albedo.MulS(0.55)
+			return cm
+		}
 		cm.Kind = 'M'
 		cm.Roughness = roughness
 		r := 1 - roughness*roughness*0.5
@@ -229,9 +240,12 @@ func compileGLTFMaterial(gm *gltf.Material, lm *asset.LoadedModel, textures *[]*
 }
 
 // modelTexture converts a decoded model image into a beam texture and
-// registers it in the world table (deduped by "model:imgN" identity).
+// registers it in the world table. Dedupe identity is model-src + image
+// index: different models' img0 are DIFFERENT images — a bare "model:imgN"
+// key made every model after the first silently reuse the first model's
+// texture (the corridor's lantern rendered with the duck's yellow map).
 func modelTexture(lm *asset.LoadedModel, imgIdx int, textures *[]*asset.Texture, texIdx map[string]int) (*asset.Texture, int) {
-	key := fmt.Sprintf("model:img%d", imgIdx)
+	key := fmt.Sprintf("%s#img%d", lm.Src, imgIdx)
 	if i, ok := texIdx[key]; ok {
 		return (*textures)[i], i
 	}

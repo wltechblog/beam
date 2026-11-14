@@ -34,6 +34,10 @@ type LoadedModel struct {
 	Materials  []*gltf.Material
 	Images     []image.Image // entry i matches doc.Images[i]; nil = failed/absent
 	ImageNames []string
+
+	// Src is the path the model was loaded from — texture dedupe
+	// identity at compile time (two models' img0 are different images).
+	Src string
 }
 
 // LoadModel imports a glTF 2.0 / GLB file: geometry (POSITION, NORMAL,
@@ -53,7 +57,7 @@ func LoadModel(path string) (*LoadedModel, error) {
 		return nil, fmt.Errorf("gltf decode: %w", err)
 	}
 
-	lm := &LoadedModel{Materials: doc.Materials}
+	lm := &LoadedModel{Materials: doc.Materials, Src: path}
 	lm.decodeImages(doc, path)
 
 	emitted := 0

@@ -109,27 +109,30 @@
     "floor": {
       "type": "matte",
       "color": [
-        0.78,
-        0.76,
-        0.73
+        1.2,
+        1.2,
+        1.2
       ],
       "diffuse": 0.85,
-      "pattern": {
-        "type": "checker",
-        "colors": [
-          [
-            0.78,
-            0.76,
-            0.73
-          ],
-          [
-            0.15,
-            0.17,
-            0.22
-          ]
-        ],
-        "scale": 1.0
-      }
+      "map": "wood.png"
+    },
+    "signGlow": {
+      "type": "emissive",
+      "color": [
+        1.0,
+        0.62,
+        0.25
+      ],
+      "power": 2.2
+    },
+    "lampGlow": {
+      "type": "emissive",
+      "color": [
+        0.35,
+        0.65,
+        1.0
+      ],
+      "power": 1.8
     }
   },
   "objects": [
@@ -181,6 +184,32 @@
       ],
       "radius": 1.0,
       "material": "glass"
+    },
+    {
+      "type": "box",
+      "name": "sign",
+      "min": [
+        -6.2,
+        3.2,
+        7.35
+      ],
+      "max": [
+        -3.8,
+        4.1,
+        7.5
+      ],
+      "material": "signGlow"
+    },
+    {
+      "type": "sphere",
+      "name": "lamp",
+      "center": [
+        3.2,
+        0.65,
+        -1.2
+      ],
+      "radius": 0.45,
+      "material": "lampGlow"
     }
   ],
   "animation": {
@@ -354,6 +383,6 @@
     "exposure": 1.0,
     "tonemap": "clip",
     "output": "teapot-atmos.png",
-    "shadowSamples": 2
+    "shadowSamples": 4
   }
 }

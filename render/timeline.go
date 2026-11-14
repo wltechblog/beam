@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wltechblog/beam/asset"
 	"github.com/wltechblog/beam/geom"
 	"github.com/wltechblog/beam/scene"
 )
@@ -252,8 +253,9 @@ func cloneCamera(c *scene.Camera) scene.Camera {
 // base objects — Compile clones before transforming (transformMesh always
 // allocates fresh Verts/Norms slices), so per-frame mutation is safe.
 type cachingResolver struct {
-	inner MeshResolver
-	mesh  map[string]*geom.TriangleMesh
+	inner    MeshResolver
+	mesh     map[string]*geom.TriangleMesh
+	textures map[string]*asset.Texture
 }
 
 func (c *cachingResolver) LoadMesh(src string) (*geom.TriangleMesh, error) {
@@ -269,6 +271,29 @@ func (c *cachingResolver) LoadMesh(src string) (*geom.TriangleMesh, error) {
 	}
 	c.mesh[src] = m
 	return m, nil
+}
+
+// LoadTexture memoizes textures by path — same policy as meshes. THIS is
+// what makes animated textured scenes resolve: Compile only loads maps
+// through a TextureResolver, and the still path's bare FileResolver has
+// one while this wrapper previously did not.
+func (c *cachingResolver) LoadTexture(path string) (*asset.Texture, error) {
+	if t, ok := c.textures[path]; ok {
+		return t, nil
+	}
+	tr, ok := c.inner.(TextureResolver)
+	if !ok {
+		return nil, fmt.Errorf("texture %q: resolver cannot load images", path)
+	}
+	t, err := tr.LoadTexture(path)
+	if err != nil {
+		return nil, err
+	}
+	if c.textures == nil {
+		c.textures = map[string]*asset.Texture{}
+	}
+	c.textures[path] = t
+	return t, nil
 }
 
 func (c *cachingResolver) TextMesh(text, font string, size, depth, spacing float64) (*geom.TriangleMesh, error) {

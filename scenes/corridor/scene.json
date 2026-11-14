@@ -108,6 +108,15 @@
       "reflectivity": 0.42,
       "roughness": 0.25,
       "specular": 0.5
+    },
+    "cageGlow": {
+      "type": "emissive",
+      "color": [
+        1.0,
+        0.72,
+        0.35
+      ],
+      "power": 1.0
     }
   },
   "objects": [
@@ -227,6 +236,17 @@
       ],
       "radius": 0.38,
       "material": "warmGlow"
+    },
+    {
+      "type": "sphere",
+      "name": "cageOrb",
+      "center": [
+        -2.754,
+        2.001,
+        1.5
+      ],
+      "radius": 0.09,
+      "material": "cageGlow"
     }
   ],
   "lights": [

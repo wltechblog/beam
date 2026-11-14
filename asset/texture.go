@@ -86,6 +86,28 @@ func LoadTexture(path string) (*Texture, error) {
 	return t, nil
 }
 
+// TextureFromImage converts a decoded image (any Go image type) into a
+// linear-RGB Texture — same sRGB decode as LoadTexture. Used by the
+// glTF importer for embedded bufferView images.
+func TextureFromImage(img image.Image) *Texture {
+	if img == nil {
+		return nil
+	}
+	b := img.Bounds()
+	t := &Texture{W: b.Dx(), H: b.Dy(), Pix: make([]float32, b.Dx()*b.Dy()*3)}
+	i := 0
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r, g, bl, _ := img.At(x, y).RGBA()
+			t.Pix[i+0] = srgbToLinear(r)
+			t.Pix[i+1] = srgbToLinear(g)
+			t.Pix[i+2] = srgbToLinear(bl)
+			i += 3
+		}
+	}
+	return t
+}
+
 // SampleLinear bilinearly samples the texture at (u, v) with V UP
 // (image row y=0 is the BOTTOM of texture space). Wrap addressing on
 // both axes (tiling textures are the norm for free-asset packs).

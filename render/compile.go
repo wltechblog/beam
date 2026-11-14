@@ -124,7 +124,6 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 	if texErr != nil {
 		return nil, texErr
 	}
-	w.Materials = mats
 
 	for i := range s.Objects {
 		o := &s.Objects[i]
@@ -156,6 +155,21 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 				m = transformMesh(m, o.Transform)
 			}
 			obj = Object3D{Kind: 'm', Mesh: m, BVH: geom.BuildMesh(m), MatIdx: mi}
+		case "model":
+			if resolver == nil {
+				continue
+			}
+			mr, ok := resolver.(ModelResolver)
+			if !ok {
+				continue
+			}
+			model, err := mr.LoadModel(o.Src)
+			if err != nil {
+				return nil, fmt.Errorf("model %q: %w", o.Src, err)
+			}
+			modelObjs := compileModel(model, o, &mats, matIdx, &w.Textures, texIdx)
+			w.Objects = append(w.Objects, modelObjs...)
+			continue
 		case "text":
 			if resolver == nil {
 				continue
@@ -185,6 +199,10 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 		}
 		return cdf[i]
 	}
+
+	// Material table is finalized AFTER the object loop: model imports
+	// append materials during it.
+	w.Materials = mats
 
 	// Mesh lights: any object whose material is emissive contributes a
 	// light. Emissive spheres become spherical area lights (radius =

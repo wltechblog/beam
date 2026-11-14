@@ -112,8 +112,15 @@ type Object struct {
 	Min    []float64 `json:"min,omitempty"`
 	Max    []float64 `json:"max,omitempty"`
 
-	// mesh
-	Src string `json:"src,omitempty"` // OBJ / STL / GLB path, relative to scene
+	// mesh / model
+	Src string `json:"src,omitempty"` // OBJ / STL / GLTF / GLB path, relative to scene
+	// Model import options (type "model"): PBR materials, textures and
+	// node transforms are honored. MaterialOverride replaces every part's
+	// material with a named scene material ("\_default" = plain matte).
+	MaterialOverride string `json:"materialOverride,omitempty"`
+	// ScaleHint rescales the imported model so its longest bounding-box
+	// edge becomes this length (0 = use raw units).
+	ScaleHint float64 `json:"scaleHint,omitempty"`
 
 	// text
 	Text    string  `json:"text,omitempty"`

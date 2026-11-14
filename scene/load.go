@@ -127,6 +127,10 @@ func (s *Scene) Validate() []ValidationErr {
 			if o.Src == "" {
 				add(p+"/src", "mesh requires src (OBJ/STL/GLB path)")
 			}
+		case "model":
+			if o.Src == "" {
+				add(p+"/src", "model requires src (glTF/GLB path)")
+			}
 		case "text":
 			if o.Text == "" {
 				add(p+"/text", "text requires text string")

@@ -25,6 +25,13 @@ type TextureResolver interface {
 	LoadTexture(path string) (*asset.Texture, error)
 }
 
+// ModelResolver is implemented by resolvers that can import full models
+// (glTF/GLB with materials + textures). Compile type-asserts, like
+// TextureResolver — stub resolvers in tests degrade models to nothing.
+type ModelResolver interface {
+	LoadModel(src string) (*asset.LoadedModel, error)
+}
+
 // World is the compiled scene: objects, materials, lights, environment.
 // SkyStop is one entry of the piecewise sky gradient (dir.Y keyed).
 type SkyStop struct {

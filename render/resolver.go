@@ -26,6 +26,12 @@ func (fr *FileResolver) LoadMesh(src string) (*geom.TriangleMesh, error) {
 	return asset.LoadMesh(fr.resolve(src))
 }
 
+// LoadModel imports a glTF/GLB with materials, textures and node
+// transforms (see asset.LoadModel).
+func (fr *FileResolver) LoadModel(src string) (*asset.LoadedModel, error) {
+	return asset.LoadModel(fr.resolve(src))
+}
+
 func (fr *FileResolver) TextMesh(text, font string, size, depth, spacing float64) (*geom.TriangleMesh, error) {
 	return asset.TextMesh(text, fr.font(font), size, depth, spacing)
 }

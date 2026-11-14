@@ -59,8 +59,10 @@ func lightKindNum(k byte) int32 {
 		return 1
 	case 's':
 		return 2
+	case 'x':
+		return 3 // emissive-mesh light
 	}
-	return 0
+	return 0 // 'p', 'X' (emissive sphere rides the radius path)
 }
 
 func rgbDefault(c []float64) geom.Vec3 {
@@ -85,6 +87,8 @@ type sceneArrays struct {
 	lPos, lDir, lCol     []float64 // 3/light
 	lPar                 []float64 // 4/light: intensity, cosAngle, radius, unused
 	lFlags               []int32   // 3/light: kind, noFalloff, shadowless
+	mlTri, mlCDF, mlArea []float64 // mesh lights: concat tri soup / area CDF / total area
+	mlStart              []int32   // 2/mesh-light: float-start, tri-count
 	skyStops             []float64 // 4/stop
 	envBuf               []float64 // 17
 	envFlags             []int32   // 4
@@ -220,6 +224,28 @@ func flatten(w *render.World) (bufs sceneArrays) {
 		if lt.Shadowless {
 			bufs.lFlags[i*3+2] = 1
 		}
+		if lt.Kind == 'x' {
+			fstart := len(bufs.mlTri)
+			bufs.mlTri = append(bufs.mlTri, lt.TriV...)
+			bufs.mlCDF = append(bufs.mlCDF, lt.TriCDF...)
+			bufs.mlArea = append(bufs.mlArea, lt.TotalArea)
+			bufs.mlStart = append(bufs.mlStart, int32(fstart), int32(len(lt.TriCDF)))
+		}
+	}
+	// pad mesh-light arrays to >=1 element — zero-length OpenCL buffers
+	// are invalid on some drivers; kernel never reads them when no
+	// light has kind 3 (same policy as the meshless-scene fix)
+	if len(bufs.mlTri) == 0 {
+		bufs.mlTri = []float64{0}
+	}
+	if len(bufs.mlCDF) == 0 {
+		bufs.mlCDF = []float64{0}
+	}
+	if len(bufs.mlArea) == 0 {
+		bufs.mlArea = []float64{0}
+	}
+	if len(bufs.mlStart) == 0 {
+		bufs.mlStart = []int32{0, 0}
 	}
 
 	if len(w.SkyStops) > 0 {
@@ -530,6 +556,10 @@ func RenderGPU(w *render.World, cam *render.Camera, width, height, samples, maxD
 	mk(i32(28, b.envFlags))
 	mk(i64(29, seedArr))
 	mk(f64(30, expArr))
+	mk(f64(31, b.mlTri))
+	mk(f64(32, b.mlCDF))
+	mk(f64(33, b.mlArea))
+	mk(i32(34, b.mlStart))
 	defer func() {
 		for _, h := range handles {
 			h.Release()
@@ -541,7 +571,7 @@ func RenderGPU(w *render.World, cam *render.Camera, width, height, samples, maxD
 		return nil, 0, err
 	}
 	defer bout.Release()
-	if err := ctx.SetArg(31, bout); err != nil {
+	if err := ctx.SetArg(35, bout); err != nil {
 		return nil, 0, err
 	}
 

@@ -255,6 +255,28 @@ func (r *Renderer) mediaInscatter(m *MediaDef, p geom.Vec3) geom.Vec3 {
 	var out geom.Vec3
 	for i := range r.World.Lights {
 		l := &r.World.Lights[i]
+		if l.Kind == 'x' {
+			// Mesh light in fog: shade from the emitter's area-weighted
+			// centroid (compile-time Pos). The media march is
+			// deterministic by design — zero RNG draws — so the direct
+			// path's triangle sampling does not apply here; the centroid
+			// gives the correct glow-scale in-scatter and ports to GPU
+			// as a plain point-at-Pos light.
+			toL := l.Pos.Sub(p)
+			dist := toL.Len()
+			if dist < 1e-9 {
+				continue
+			}
+			sld := toL.MulS(1 / dist)
+			o := p.Add(sld.MulS(1e-4))
+			trans := r.shadowTrans(o, sld, dist)
+			if trans.X <= 0 && trans.Y <= 0 && trans.Z <= 0 {
+				continue
+			}
+			tm := beamExp(-m.K * mediaOD(m, p.Y, sld.Y, dist))
+			out = out.Add(mulV(l.Color, trans).MulS(l.Intensity * tm))
+			continue
+		}
 		ld, dist := lightDir(l, p)
 		if ld == (geom.Vec3{}) {
 			continue
@@ -459,6 +481,47 @@ func (r *Renderer) directLight(p, n, albedo geom.Vec3, diffuseK, energyScale flo
 	out := mulV(albedo, r.World.AmbientColor).MulS(r.World.Ambient * energyScale)
 	for i := range r.World.Lights {
 		l := &r.World.Lights[i]
+		if l.Kind == 'x' {
+			// Mesh light: area-weighted triangle sampling. Same budget
+			// as spherical area lights (shadowSamples rays), same fixed
+			// draw order (3 per sample) so CPU/GPU streams stay in
+			// lockstep. ndotl uses the SAMPLE's face normal — the
+			// emitter's back faces do not light the surface.
+			ns := r.World.ShadowSamples
+			if ns < 1 {
+				ns = 1
+			}
+			var acc geom.Vec3
+			var anyLit bool
+			for js := 0; js < ns; js++ {
+				u1 := rng.Float64()
+				u2 := rng.Float64()
+				u3 := rng.Float64()
+				sp, sn := l.SampleMeshLight(u1, u2, u3)
+				toL := sp.Sub(p)
+				dist := toL.Len()
+				if dist < 1e-9 {
+					continue
+				}
+				sld := toL.MulS(1 / dist)
+				if n.Dot(sld) <= 0 || sn.Dot(sld) >= 0 {
+					continue // surface faces away, or sample faces away
+				}
+				shadowRay := offset(p, n, sld)
+				trans := r.shadowTrans(shadowRay.Orig, sld, dist)
+				if trans.X <= 0 && trans.Y <= 0 && trans.Z <= 0 {
+					continue
+				}
+				atten := lightAttenuation(l, dist)
+				lit := mulV(albedo, l.Color).MulS(n.Dot(sld) * l.Intensity * diffuseK * energyScale * atten)
+				acc = acc.Add(mulV(lit, trans))
+				anyLit = true
+			}
+			if anyLit {
+				out = out.Add(acc.MulS(1 / float64(ns)))
+			}
+			continue
+		}
 		ld, dist := lightDir(l, p)
 		if ld == (geom.Vec3{}) {
 			continue
@@ -699,6 +762,15 @@ func (r *Renderer) shadowTrans(orig, dir geom.Vec3, dist float64) geom.Vec3 {
 			return trans
 		}
 		mat := &r.World.Materials[obj.MatIdx]
+		if mat.Kind == 'e' {
+			// Emissive surfaces are LIGHT SOURCES, not occluders: a
+			// shadow ray that hits one has reached (or passed through) an
+			// emitter — e.g. the ray toward a mesh light's centroid or a
+			// radius light's center always crosses the emitter's own
+			// surface. Continue past it at full transmission.
+			orig = h.P.Add(dir.MulS(2e-4))
+			continue
+		}
 		if mat.Kind != 'g' {
 			return geom.Vec3{}
 		}

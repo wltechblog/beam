@@ -89,7 +89,7 @@ type Object3D struct {
 
 // LightDef is a compiled light.
 type LightDef struct {
-	Kind       byte // 'p' point, 'd' directional, 's' spot
+	Kind       byte // 'p' point, 'd' directional, 's' spot, 'x' emissive mesh, 'X' emissive sphere
 	Pos, Dir   geom.Vec3
 	Color      geom.Vec3
 	Intensity  float64
@@ -97,6 +97,55 @@ type LightDef struct {
 	Radius     float64 // spherical light radius; > 0 = soft shadows
 	NoFalloff  bool    // POV default: point lights do not attenuate with distance
 	Shadowless bool    // skip shadow rays (POV shadowless keyword)
+
+	// Mesh-light fields (Kind == 'x'). TriV is the flattened triangle
+	// soup (9 floats/tri, world space, post-transform); TriCDF is the
+	// cumulative distribution over triangle areas (len = nTris, last
+	// entry = total area); TotalArea is that total. Sampling = binary
+	// search the CDF with one uniform draw, then barycentric jitter
+	// with two more — fixed 3 draws per mesh-light sample, so CPU and
+	// GPU RNG streams stay in lockstep.
+	TriV      []float64
+	TriCDF    []float64
+	TotalArea float64
+}
+
+// SampleMeshLight picks one point on the mesh light's surface from
+// three uniform RNG draws: one for the area CDF (binary search), two
+// for barycentric coordinates. Returns the point and its face normal.
+// Exposed on LightDef so the GPU port can mirror it exactly.
+func (l *LightDef) SampleMeshLight(u1, u2, u3 float64) (geom.Vec3, geom.Vec3) {
+	// u1 selects a triangle by area
+	x := u1 * l.TotalArea
+	lo, hi := 0, len(l.TriCDF)-1
+	for lo < hi {
+		mid := (lo + hi) / 2
+		if l.TriCDF[mid] < x {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	tri := lo
+	// barycentric jitter (uniform on the triangle): sqrt keeps the
+	// distribution flat in area, not in parameter space
+	su := math.Sqrt(u2)
+	b0 := 1 - su
+	b1 := su * (1 - u3)
+	b2 := su * u3
+	o := tri * 9
+	tv := l.TriV
+	p := geom.Vec3{
+		X: tv[o+0]*b0 + tv[o+3]*b1 + tv[o+6]*b2,
+		Y: tv[o+1]*b0 + tv[o+4]*b1 + tv[o+7]*b2,
+		Z: tv[o+2]*b0 + tv[o+5]*b1 + tv[o+8]*b2,
+	}
+	n := geom.Vec3{
+		X: tv[o+3+0] - tv[o+0], Y: tv[o+3+1] - tv[o+1], Z: tv[o+3+2] - tv[o+2],
+	}.Cross(geom.Vec3{
+		X: tv[o+6+0] - tv[o+0], Y: tv[o+6+1] - tv[o+1], Z: tv[o+6+2] - tv[o+2],
+	})
+	return p, n.Norm()
 }
 
 // CompiledMaterial holds runtime material parameters.

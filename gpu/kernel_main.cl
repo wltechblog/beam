@@ -51,6 +51,12 @@ typedef struct {
 	__global const bd *lPos, *lDir, *lCol, *lPar; // lPar 2: intensity cosAngle
 	__global const int *lFlags;                   // 3: kind noFalloff shadowless
 	int nLights;
+	// mesh lights (lFlags kind 3): concatenated triangle soups + area
+	// CDFs + per-light total area + (float-start, tri-count) offsets
+	__global const bd *mlTri;
+	__global const bd *mlCDF;
+	__global const bd *mlArea;
+	__global const int *mlStart;
 	int shadowSamples; // per-light shadow rays for radius lights (cfg[8])
 	__global const bd *skyStops; // 4/stop: y r g b
 	int nStops;
@@ -74,6 +80,32 @@ typedef struct {
 	bd mediaAlt;     // fogBuf[4]
 	bd mediaOff;     // fogBuf[5]
 } scenebuf;
+
+// sample_mesh_light: area-weighted triangle sampling for mesh lights —
+// exact port of LightDef.SampleMeshLight. u1 = CDF binary search,
+// u2/u3 = sqrt-barycentric jitter. Returns point + face normal.
+static void sample_mesh_light(__global const bd *mlTri, __global const bd *mlCDF,
+                              __global const bd *mlArea, __global const int *mlStart,
+                              int li, bd u1, bd u2, bd u3, v3 *outP, v3 *outN) {
+	int fstart = mlStart[li * 2];
+	int ntri = mlStart[li * 2 + 1];
+	bd x = u1 * mlArea[li];
+	int lo = 0, hi = ntri - 1;
+	while (lo < hi) {
+		int mid = (lo + hi) >> 1;
+		if (mlCDF[fstart + mid] < x) lo = mid + 1; else hi = mid;
+	}
+	int o = (fstart + lo) * 9;
+	__global const bd *tv = mlTri;
+	bd su = sqrt(u2);
+	bd b0 = 1 - su, b1 = su * (1 - u3), b2 = su * u3;
+	outP->x = tv[o+0]*b0 + tv[o+3]*b1 + tv[o+6]*b2;
+	outP->y = tv[o+1]*b0 + tv[o+4]*b1 + tv[o+7]*b2;
+	outP->z = tv[o+2]*b0 + tv[o+5]*b1 + tv[o+8]*b2;
+	v3 e1 = v3_(tv[o+3]-tv[o+0], tv[o+4]-tv[o+1], tv[o+5]-tv[o+2]);
+	v3 e2 = v3_(tv[o+6]-tv[o+0], tv[o+7]-tv[o+1], tv[o+8]-tv[o+2]);
+	*outN = vnorm(vcross(e1, e2));
+}
 
 // ---------- participating media (exact port of renderer.go) ----------
 
@@ -107,6 +139,10 @@ static v3 media_inscatter(scenebuf *S, v3 p) {
 			                         S->nodeLeft, S->nodeRight, S->nodeCount, S->triV, S->triN);
 			if (!h.hit || h.t >= L.dist) break;
 			int m2 = S->objMat[h.objIdx];
+			if (S->matFlags[m2 * 4 + 0] == 3) { // emissive: light source, not occluder
+				o = vadd(h.p, vmuls(L.ld, 2e-4));
+				continue;
+			}
 			if (S->matFlags[m2 * 4 + 0] != 2) { trans = v3_(0, 0, 0); break; }
 			v3 alb2 = mat_albedo(S->matAlb, S->matP0, S->matP1, S->matPar, S->matFlags, m2, h.p);
 			trans = vmuls(vmul(trans, alb2), 0.85);
@@ -169,6 +205,53 @@ static v3 direct_light(scenebuf *S, v3 p, v3 n, v3 albedo, int m, bd diffuseK, b
 	v3 out = vmul(albedo, S->ambientColor);
 	out = vmuls(out, S->ambient * energyScale);
 	for (int i = 0; i < S->nLights; i++) {
+		if (S->lFlags[i * 3] == 3) { // mesh light: area-weighted triangle sampling
+			int ns = S->shadowSamples;
+			if (ns < 1) ns = 1;
+			v3 acc = v3_(0, 0, 0);
+			int anyLit = 0;
+			for (int js = 0; js < ns; js++) {
+				bd u1 = rng_float(rng);
+				bd u2 = rng_float(rng);
+				bd u3 = rng_float(rng);
+				v3 sp, sn;
+				sample_mesh_light(S->mlTri, S->mlCDF, S->mlArea, S->mlStart, i, u1, u2, u3, &sp, &sn);
+				v3 toL = vsub(sp, p);
+				bd sdist = sqrt(vdot(toL, toL));
+				if (sdist < 1e-9) continue;
+				v3 sld = vmuls(toL, 1 / sdist);
+				if (vdot(n, sld) <= 0 || vdot(sn, sld) >= 0) continue;
+				v3 orig = vadd(p, vmuls(n, vdot(sld, n) < 0 ? -1e-4 : 1e-4));
+				v3 sampleTrans = v3_(1, 1, 1);
+				for (int hop = 0; hop < 8; hop++) {
+					khit h = world_intersect(orig, sld, S->objA, S->objB, S->objKind, S->objRoot,
+					                         S->objNorms, S->nObjs, S->nodeBMin, S->nodeBMax,
+					                         S->nodeLeft, S->nodeRight, S->nodeCount, S->triV, S->triN);
+					if (!h.hit || h.t >= sdist) break;
+					int m2 = S->objMat[h.objIdx];
+					if (S->matFlags[m2 * 4 + 0] == 3) { // emissive: light source, not occluder
+						orig = vadd(h.p, vmuls(sld, 2e-4));
+						continue;
+					}
+					if (S->matFlags[m2 * 4 + 0] != 2) { sampleTrans = v3_(0,0,0); break; }
+					v3 alb2 = mat_albedo(S->matAlb, S->matP0, S->matP1, S->matPar, S->matFlags, m2, h.p);
+					sampleTrans = vmuls(vmul(sampleTrans, alb2), 0.85);
+					orig = vadd(h.p, vmuls(sld, 2e-4));
+				}
+				if (S->mediaMode) {
+					bd mt = gp_exp_use(-S->mediaK * optical_depth(p.y, sld.y, sdist, S->mediaAlt, S->mediaOff, S->mediaAtan));
+					sampleTrans = vmuls(sampleTrans, mt);
+				}
+				if (sampleTrans.x <= 0 && sampleTrans.y <= 0 && sampleTrans.z <= 0) continue;
+				bd atten = light_atten(S->lPar, S->lFlags, i, sdist);
+				bd scale = vdot(n, sld) * S->lPar[i * 4 + 0] * diffuseK * energyScale * atten;
+				v3 lc = v3_(S->lCol[i*3], S->lCol[i*3+1], S->lCol[i*3+2]);
+				acc = vadd(acc, vmuls(vmul(vmul(albedo, lc), sampleTrans), scale));
+				anyLit = 1;
+			}
+			if (anyLit) out = vadd(out, vmuls(acc, 1.0 / (bd)ns));
+			continue;
+		}
 		klightdir L = light_dir(S->lPos, S->lDir, S->lPar, S->lFlags, i, p);
 		if (!L.ok) continue;
 		bd ndotl = vdot(n, L.ld);
@@ -199,6 +282,10 @@ static v3 direct_light(scenebuf *S, v3 p, v3 n, v3 albedo, int m, bd diffuseK, b
 						                         S->nodeLeft, S->nodeRight, S->nodeCount, S->triV, S->triN);
 						if (!h.hit || h.t >= sdist) break;
 						int m2 = S->objMat[h.objIdx];
+												if (S->matFlags[m2 * 4 + 0] == 3) { // emissive: light source, not occluder
+							orig = vadd(h.p, vmuls(sld, 2e-4));
+							continue;
+						}
 						if (S->matFlags[m2 * 4 + 0] != 2) { sampleTrans = v3_(0,0,0); break; }
 						v3 alb2 = mat_albedo(S->matAlb, S->matP0, S->matP1, S->matPar, S->matFlags, m2, h.p);
 						sampleTrans = vmuls(vmul(sampleTrans, alb2), 0.85);
@@ -216,6 +303,10 @@ static v3 direct_light(scenebuf *S, v3 p, v3 n, v3 albedo, int m, bd diffuseK, b
 					                         S->nodeLeft, S->nodeRight, S->nodeCount, S->triV, S->triN);
 					if (!h.hit || h.t >= L.dist) break;
 					int m2 = S->objMat[h.objIdx];
+										if (S->matFlags[m2 * 4 + 0] == 3) { // emissive: light source, not occluder
+						orig = vadd(h.p, vmuls(L.ld, 2e-4));
+						continue;
+					}
 					if (S->matFlags[m2 * 4 + 0] != 2) { trans = v3_(0, 0, 0); break; }
 					v3 alb2 = mat_albedo(S->matAlb, S->matP0, S->matP1, S->matPar, S->matFlags, m2, h.p);
 					trans = vmuls(vmul(trans, alb2), 0.85);
@@ -479,6 +570,8 @@ __kernel void trace_pixel(__global const int *cfg,      // [0]=W [1]=H [2]=sampl
                           __global const int *envFlags, // [0] skyGradient [1] nStops [2] fogEnabled [3] fogAtan
                           __global const long *seedBuf, // [0] = seed
                           __global const bd *exposureBuf,
+                          __global const bd *mlTri, __global const bd *mlCDF,
+                          __global const bd *mlArea, __global const int *mlStart,
                           __global uchar *outRGBA) {
 	int xi = get_global_id(0);
 	int yi = get_global_id(1);
@@ -497,6 +590,7 @@ __kernel void trace_pixel(__global const int *cfg,      // [0]=W [1]=H [2]=sampl
 	S.matAlb = matAlb; S.matP0 = matP0; S.matP1 = matP1; S.matPar = matPar; S.matFlags = matFlags;
 	S.nMats = cfg[6];
 	S.lPos = lPos; S.lDir = lDir; S.lCol = lCol; S.lPar = lPar; S.lFlags = lFlags;
+	S.mlTri = mlTri; S.mlCDF = mlCDF; S.mlArea = mlArea; S.mlStart = mlStart;
 	S.nLights = cfg[7];
 	S.shadowSamples = cfg[8];
 	S.skyStops = skyStops; S.nStops = envFlags[1];

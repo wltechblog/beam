@@ -142,6 +142,67 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 		w.Objects = append(w.Objects, &obj)
 	}
 
+	// areaAt returns the cumulative area through CDF index i (0 before
+	// the first triangle).
+	areaAt := func(cdf []float64, i int) float64 {
+		if i < 0 {
+			return 0
+		}
+		return cdf[i]
+	}
+
+	// Mesh lights: any object whose material is emissive contributes a
+	// light. Emissive spheres become spherical area lights (radius =
+	// sphere radius — same path as authored radius lights). Emissive
+	// meshes (incl. boxes/text) become area-weighted triangle samplers.
+	// The object itself keeps rendering with its emissive surface; these
+	// lights exist so it also ILLUMINATES. NoFalloff is forced on: the
+	// emitter's power is authored per-object, not as a point-source
+	// intensity, and the existing quadratic attenuation would crush
+	// emission at realistic scene scales.
+	for i := range w.Objects {
+		obj := w.Objects[i]
+		mat := &w.Materials[obj.MatIdx]
+		if mat.Kind != 'e' {
+			continue
+		}
+		switch obj.Kind {
+		case 's':
+			w.Lights = append(w.Lights, LightDef{
+				Kind: 'X', Pos: obj.Center, Radius: obj.Radius,
+				Color: mat.Albedo, Intensity: mat.Power,
+				NoFalloff: true,
+			})
+		case 'm':
+			tv := make([]float64, 0, len(obj.Mesh.Tris)*9)
+			cdf := make([]float64, 0, len(obj.Mesh.Tris))
+			var areaAcc float64
+			for _, t := range obj.Mesh.Tris {
+				a, b, c := obj.Mesh.Verts[t[0]], obj.Mesh.Verts[t[1]], obj.Mesh.Verts[t[2]]
+				tv = append(tv, a.X, a.Y, a.Z, b.X, b.Y, b.Z, c.X, c.Y, c.Z)
+				areaAcc += b.Sub(a).Cross(c.Sub(a)).Len() * 0.5
+				cdf = append(cdf, areaAcc)
+			}
+			if areaAcc > 0 {
+				// area-weighted centroid: deterministic in-scatter point
+				// for the media march (and a sane Pos for any code that
+				// treats the light as finite)
+				var c geom.Vec3
+				for j := 0; j+9 <= len(tv); j += 9 {
+					a := geom.Vec3{X: tv[j+0], Y: tv[j+1], Z: tv[j+2]}
+					b := geom.Vec3{X: tv[j+3], Y: tv[j+4], Z: tv[j+5]}
+					c2 := geom.Vec3{X: tv[j+6], Y: tv[j+7], Z: tv[j+8]}
+					c = c.Add(a.Add(b).Add(c2).MulS(areaAt(cdf, j/9) - areaAt(cdf, j/9-1)))
+				}
+				w.Lights = append(w.Lights, LightDef{
+					Kind: 'x', Pos: c.MulS(1 / (3 * areaAcc)), Color: mat.Albedo, Intensity: mat.Power,
+					TriV: tv, TriCDF: cdf, TotalArea: areaAcc,
+					NoFalloff: true,
+				})
+			}
+		}
+	}
+
 	for i := range s.Lights {
 		l := &s.Lights[i]
 		ld := LightDef{Pos: rgbv(l.Pos), Dir: normv(l.Dir), Intensity: l.Intensity}

@@ -186,18 +186,14 @@
       "material": "glass"
     },
     {
-      "type": "box",
+      "type": "sphere",
       "name": "sign",
-      "min": [
-        -6.2,
-        3.2,
-        7.35
+      "center": [
+        -5.0,
+        3.65,
+        7.42
       ],
-      "max": [
-        -3.8,
-        4.1,
-        7.5
-      ],
+      "radius": 0.8,
       "material": "signGlow"
     },
     {

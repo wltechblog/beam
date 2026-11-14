@@ -45,6 +45,12 @@ func LoadOBJ(path string) (*geom.TriangleMesh, error) {
 	defer f.Close()
 
 	m := &geom.TriangleMesh{}
+	var texCoords []geom.UV  // raw vt list
+	var rawNorms []geom.Vec3 // raw vn list
+	type corner struct{ v, vt, vn int }
+	var faces [][3]corner
+	useUV, useVN := false, false
+
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	line := 0
@@ -63,6 +69,13 @@ func LoadOBJ(path string) (*geom.TriangleMesh, error) {
 			y, _ := strconv.ParseFloat(tok[2], 64)
 			z, _ := strconv.ParseFloat(tok[3], 64)
 			m.Verts = append(m.Verts, geom.Vec3{X: x, Y: y, Z: z})
+		case "vt":
+			if len(tok) < 3 {
+				continue
+			}
+			u, _ := strconv.ParseFloat(tok[1], 64)
+			v, _ := strconv.ParseFloat(tok[2], 64)
+			texCoords = append(texCoords, geom.UV{U: u, V: v})
 		case "vn":
 			if len(tok) < 4 {
 				continue
@@ -70,24 +83,138 @@ func LoadOBJ(path string) (*geom.TriangleMesh, error) {
 			x, _ := strconv.ParseFloat(tok[1], 64)
 			y, _ := strconv.ParseFloat(tok[2], 64)
 			z, _ := strconv.ParseFloat(tok[3], 64)
-			m.Norms = append(m.Norms, geom.Vec3{X: x, Y: y, Z: z}.Norm())
+			rawNorms = append(rawNorms, geom.Vec3{X: x, Y: y, Z: z}.Norm())
 		case "f":
-			idx := faceIndices(tok[1:], len(m.Verts))
-			if len(idx) < 3 {
+			var cns []corner
+			for _, t := range tok[1:] {
+				v, vt, vn, ok := parseCorner(t, len(m.Verts), len(texCoords), len(rawNorms))
+				if !ok {
+					continue
+				}
+				cns = append(cns, corner{v: v, vt: vt, vn: vn})
+				useUV = useUV || vt >= 0
+				useVN = useVN || vn >= 0
+			}
+			if len(cns) < 3 {
 				continue
 			}
-			for k := 2; k < len(idx); k++ {
-				m.Tris = append(m.Tris, [3]int32{int32(idx[0]), int32(idx[k-1]), int32(idx[k])})
+			for k := 2; k < len(cns); k++ {
+				faces = append(faces, [3]corner{cns[0], cns[k-1], cns[k]})
 			}
 		}
 	}
 	if err := sc.Err(); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	if len(m.Tris) == 0 {
+	if len(faces) == 0 {
 		return nil, fmt.Errorf("%s: no faces", path)
 	}
+
+	// Weld corners: the same (v, vt, vn) triple maps to ONE vertex. When a
+	// position index appears with a DIFFERENT vt/vn across faces (the
+	// classic UV-seam case), split it into a new vertex — geometry grows
+	// slightly, per-vertex UVs/normals stay exact.
+	nVerts0 := len(m.Verts)
+	normFor := make([]int32, nVerts0) // position -> vn index, -1 none
+	uvFor := make([]int32, nVerts0)   // position -> vt index, -1 none
+	for i := range normFor {
+		normFor[i], uvFor[i] = -1, -1
+	}
+	// grow the per-position tables as seam splits append vertices
+	growTables := func(n int) {
+		for len(normFor) < n {
+			normFor = append(normFor, -1)
+			uvFor = append(uvFor, -1)
+		}
+	}
+	remap := make(map[[3]int32]int32, len(faces)*3)
+	m.Tris = make([][3]int32, 0, len(faces))
+	for _, fce := range faces {
+		var tri [3]int32
+		for ci, c := range fce {
+			key := [3]int32{int32(c.v), int32(c.vt), int32(c.vn)}
+			if vi, ok := remap[key]; ok {
+				tri[ci] = vi
+				continue
+			}
+			vi := int32(c.v)
+			if (c.vt >= 0 && uvFor[vi] != -1 && uvFor[vi] != int32(c.vt)) ||
+				(c.vn >= 0 && normFor[vi] != -1 && normFor[vi] != int32(c.vn)) {
+				// seam split: duplicate the position, carry no old UV/normal
+				m.Verts = append(m.Verts, m.Verts[vi])
+				vi = int32(len(m.Verts) - 1)
+				growTables(len(m.Verts))
+				// uvFor/normFor for the NEW index default to -1 (fresh)
+			}
+			if c.vt >= 0 {
+				uvFor[vi] = int32(c.vt)
+			}
+			if c.vn >= 0 {
+				normFor[vi] = int32(c.vn)
+			}
+			remap[key] = vi
+			tri[ci] = vi
+		}
+		m.Tris = append(m.Tris, tri)
+	}
+	if useUV {
+		m.UVs = make([]geom.UV, len(m.Verts))
+		for i := range m.UVs {
+			if uvFor[i] >= 0 && uvFor[i] < int32(len(texCoords)) {
+				m.UVs[i] = texCoords[uvFor[i]]
+			}
+		}
+	}
+	if useVN {
+		m.Norms = make([]geom.Vec3, len(m.Verts))
+		for i := range m.Norms {
+			if normFor[i] >= 0 && normFor[i] < int32(len(rawNorms)) {
+				m.Norms[i] = rawNorms[normFor[i]]
+			}
+		}
+	}
 	return m, nil
+}
+
+// parseCorner parses one OBJ face token — v, v/vt, v//vn, v/vt/vn — into
+// 0-based indices (vt/vn = -1 when absent). 1-based and negative
+// (relative) indices per the OBJ spec.
+func parseCorner(t string, nVerts, nVT, nVN int) (v, vt, vn int, ok bool) {
+	parts := strings.Split(t, "/")
+	n, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, -1, -1, false
+	}
+	v = relIdx(n, nVerts)
+	if v < 0 {
+		return 0, -1, -1, false
+	}
+	vt, vn = -1, -1
+	if len(parts) > 1 && parts[1] != "" {
+		if n, err := strconv.Atoi(parts[1]); err == nil {
+			if r := relIdx(n, nVT); r >= 0 {
+				vt = r
+			}
+		}
+	}
+	if len(parts) > 2 && parts[2] != "" {
+		if n, err := strconv.Atoi(parts[2]); err == nil {
+			if r := relIdx(n, nVN); r >= 0 {
+				vn = r
+			}
+		}
+	}
+	return v, vt, vn, true
+}
+
+func relIdx(n, total int) int {
+	if n < 0 {
+		n = total + n + 1
+	}
+	if n < 1 || n > total {
+		return -1
+	}
+	return n - 1
 }
 
 // faceIndices converts OBJ face tokens (v, v/vt, v//vn, v/vt/vn — 1-based,

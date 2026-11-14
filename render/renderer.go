@@ -421,10 +421,46 @@ func opticalDepth(f *FogDef, y0, dy, dist float64) float64 {
 	return total
 }
 
+// albedoAt resolves the surface albedo: texture at the hit's
+// barycentric-interpolated UV when the mesh is textured, else the
+// pattern/solid path. obj may be nil (glass path) — then patterns only.
+func (r *Renderer) albedoAt(mat *CompiledMaterial, hit *geom.Hit, obj *Object3D) geom.Vec3 {
+	if mat.Tex == nil || obj == nil {
+		return mat.AlbedoAt(hit.P)
+	}
+	switch obj.Kind {
+	case 'm':
+		if obj.Mesh != nil && len(obj.Mesh.UVs) > 0 {
+			if a, b, c, ok := obj.Mesh.TriUV(hit.Tri); ok {
+				w0 := 1 - hit.U - hit.V
+				u := a.U*w0 + b.U*hit.U + c.U*hit.V
+				v := a.V*w0 + b.V*hit.U + c.V*hit.V
+				return mat.AlbedoAtUV(u, v, hit.P)
+			}
+		}
+	case 'p':
+		// Planes have no authored UVs — texture them with automatic
+		// planar mapping: project onto the plane's dominant axis and
+		// use the hit position's other two coordinates (world units =
+		// UV units, wrap-addressed by the sampler; tiled textures from
+		// free-asset packs cover floors/walls with zero scene authoring).
+		n := obj.PlaneN
+		switch {
+		case n.Y*n.Y >= n.X*n.X && n.Y*n.Y >= n.Z*n.Z: // floor/ceiling
+			return mat.AlbedoAtUV(hit.P.X, hit.P.Z, hit.P)
+		case n.X*n.X >= n.Z*n.Z: // wall facing x
+			return mat.AlbedoAtUV(hit.P.Z, hit.P.Y, hit.P)
+		default: // wall facing z
+			return mat.AlbedoAtUV(hit.P.X, hit.P.Y, hit.P)
+		}
+	}
+	return mat.AlbedoAt(hit.P)
+}
+
 // shade computes the surface response at a hit (no fog).
 func (r *Renderer) shade(ray geom.Ray, hit *geom.Hit, obj *Object3D, depth int, rng *RNG) geom.Vec3 {
 	mat := &r.World.Materials[obj.MatIdx]
-	albedo := mat.AlbedoAt(hit.P)
+	albedo := r.albedoAt(mat, hit, obj)
 	n := hit.N // oriented against the ray
 	p := hit.P
 
@@ -649,7 +685,7 @@ func sqrtOneMinus(x float64) float64 {
 
 // glass computes Fresnel-weighted reflection + refraction with TIR.
 func (r *Renderer) glass(ray geom.Ray, hit *geom.Hit, mat *CompiledMaterial, depth int, rng *RNG) geom.Vec3 {
-	albedo := mat.AlbedoAt(hit.P)
+	albedo := r.albedoAt(mat, hit, nil)
 	if depth <= 1 {
 		return mulV(r.World.EnvColor, albedo)
 	}

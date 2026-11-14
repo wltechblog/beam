@@ -89,7 +89,8 @@ depth of field.
 
 ## Import formats
 
-- **OBJ + MTL** (v, f, usemtl → auto-materials)
+- **OBJ + MTL** (v, vt, vn, f — full v/vt/vn corner welding with UV-seam splitting; usemtl → auto-materials)
+- **Textures** — PNG/JPEG albedo maps (`"map": "wood.png"` on a material; sampled at mesh UVs, bilinear, wrap addressing, sRGB→linear). Planes texture automatically via planar world-space mapping. Multiplies `color` (white = map as authored). CPU today; GPU port next.
 - **STL** (binary + ASCII)
 - **glTF 2.0 / GLB** via `qmuntal/gltf` (positions/indices/normals)
 

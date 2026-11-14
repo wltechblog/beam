@@ -76,3 +76,9 @@ func (fr *FileResolver) font(name string) string {
 	}
 	return name // let TextMesh report the error
 }
+
+// LoadTexture loads a PNG/JPEG texture relative to the scene dir (or
+// absolute), implementing TextureResolver.
+func (fr *FileResolver) LoadTexture(path string) (*asset.Texture, error) {
+	return asset.LoadTexture(fr.resolve(path))
+}

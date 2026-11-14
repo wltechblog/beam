@@ -68,10 +68,15 @@ type Pattern struct {
 
 // Material describes surface response.
 type Material struct {
-	Type      string    `json:"type"` // matte | metal | glass | emissive
-	Color     []float64 `json:"color,omitempty"`
-	Pattern   *Pattern  `json:"pattern,omitempty"` // overrides Color for albedo
-	Roughness float64   `json:"roughness,omitempty"`
+	Type    string    `json:"type"` // matte | metal | glass | emissive
+	Color   []float64 `json:"color,omitempty"`
+	Pattern *Pattern  `json:"pattern,omitempty"` // overrides Color for albedo
+	// Map is an albedo texture (PNG/JPEG path relative to the scene or
+	// absolute). Sampled at the mesh's UVs; multiplies Color (so a white
+	// Color shows the map as-authored). Ignored on untextured geometry —
+	// Color applies there.
+	Map       string  `json:"map,omitempty"`
+	Roughness float64 `json:"roughness,omitempty"`
 	// Reflectivity raises glass Fresnel base; on metal it is the reflection
 	// strength (POV `reflection` value, 0..1).
 	Reflectivity float64 `json:"reflectivity,omitempty"`

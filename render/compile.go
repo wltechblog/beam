@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"github.com/wltechblog/beam/asset"
 	"math"
 
 	"github.com/wltechblog/beam/geom"
@@ -85,9 +86,43 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 
 	matIdx := map[string]int{}
 	mats := []CompiledMaterial{defaultMat()}
+	// Texture table: dedupe by map path, first-use order (GPU upload
+	// order must match TexIdx). A resolver without LoadTexture (nil, stub
+	// tests) degrades every map to solid Color — load errors are FATAL so
+	// typos surface at compile, not as silently-white geometry.
+	texIdx := map[string]int{}
+	loadTex := func(path string) (*asset.Texture, int) {
+		if path == "" {
+			return nil, -1
+		}
+		if i, ok := texIdx[path]; ok {
+			return w.Textures[i], i
+		}
+		tr, ok := resolver.(TextureResolver)
+		if !ok {
+			return nil, -1
+		}
+		t, err := tr.LoadTexture(path)
+		if err != nil {
+			return nil, -1 // caller reports; keep compile total below
+		}
+		w.Textures = append(w.Textures, t)
+		i := len(w.Textures) - 1
+		texIdx[path] = i
+		return t, i
+	}
+	var texErr error
 	for name, m := range s.Materials {
 		matIdx[name] = len(mats)
-		mats = append(mats, compileMaterial(m))
+		cm := compileMaterial(m)
+		cm.Tex, cm.TexIdx = loadTex(m.Map)
+		if m.Map != "" && cm.Tex == nil && texErr == nil {
+			texErr = fmt.Errorf("material %q: cannot load map %q", name, m.Map)
+		}
+		mats = append(mats, cm)
+	}
+	if texErr != nil {
+		return nil, texErr
 	}
 	w.Materials = mats
 
@@ -250,6 +285,7 @@ func transformMesh(m *geom.TriangleMesh, t *scene.Transform) *geom.TriangleMesh 
 		Verts:  make([]geom.Vec3, len(m.Verts)),
 		Tris:   m.Tris,
 		MatIdx: m.MatIdx,
+		UVs:    m.UVs, // texture coordinates ride along untouched (2D, no transform)
 	}
 	for i, v := range m.Verts {
 		out.Verts[i] = tm.Apply(v)

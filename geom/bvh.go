@@ -85,6 +85,26 @@ type TriangleMesh struct {
 	Tris   [][3]int32
 	Norms  []Vec3 // per-vertex normals; empty = use face normals
 	MatIdx []int32
+	// UVs are per-vertex texture coordinates (the OBJ loader splits seam
+	// vertices so position/UV pairs stay unique). Empty = untextured.
+	UVs []UV
+}
+
+// UV is a texture coordinate in the unit square (0..1, V up). OBJ vt
+// values are used verbatim (Y-up V, matching image row order after the
+// flip in the texture decoders).
+type UV struct {
+	U, V float64
+}
+
+// TriUV returns the three corner UVs of a triangle (interpolated the same
+// way as positions). Second return is false when the mesh is untextured.
+func (m *TriangleMesh) TriUV(t int) (a, b, c UV, ok bool) {
+	if len(m.UVs) == 0 {
+		return UV{}, UV{}, UV{}, false
+	}
+	idx := m.Tris[t]
+	return m.UVs[idx[0]], m.UVs[idx[1]], m.UVs[idx[2]], true
 }
 
 func (m *TriangleMesh) NumTris() int { return len(m.Tris) }

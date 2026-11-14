@@ -296,7 +296,7 @@ func toolSchema() (string, bool) {
 		"scene": map[string]interface{}{
 			"version":     "1 (required)",
 			"camera":      "pos [x,y,z], lookAt [x,y,z], fov degrees (horizontal), aperture, focusDist (0 = pinhole / autofocus)",
-			"materials":   "map name -> {type: matte|metal|glass|emissive, color [r,g,b] 0..1, pattern, roughness, ior (glass), power (emissive)}",
+			"materials":   "map name -> {type: matte|metal|glass|emissive, color [r,g,b] 0..1 (multiplies map), map: texture path png/jpg (mesh UVs; planes get automatic planar mapping in world units), pattern, roughness, ior (glass), power (emissive)}",
 			"pattern":     "{type: solid|checker|gradient, colors [[r,g,b],[r,g,b]], scale (checker), axis x|y|z + from/to (gradient)}",
 			"objects":     "list of {type: sphere|plane|box|mesh|text, material, transform {translate, rotate(deg XYZ), scale}, ...shape fields}",
 			"sphere":      "center [x,y,z], radius",

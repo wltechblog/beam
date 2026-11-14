@@ -1,6 +1,7 @@
 package render
 
 import (
+	"github.com/wltechblog/beam/asset"
 	"math"
 
 	"github.com/wltechblog/beam/geom"
@@ -15,6 +16,13 @@ type geomNormal = geom.Vec3
 type MeshResolver interface {
 	LoadMesh(src string) (*geom.TriangleMesh, error)
 	TextMesh(text, font string, size, depth, spacing float64) (*geom.TriangleMesh, error)
+}
+
+// TextureResolver is an OPTIONAL MeshResolver extension for loading
+// material maps. Resolvers that cannot load images simply don't
+// implement it; materials with maps degrade to solid Color.
+type TextureResolver interface {
+	LoadTexture(path string) (*asset.Texture, error)
 }
 
 // World is the compiled scene: objects, materials, lights, environment.
@@ -39,6 +47,9 @@ type World struct {
 	Ambient      float64
 	AmbientColor geom.Vec3
 	Lights       []LightDef
+	// Textures is the deduped texture table; CompiledMaterial.TexIdx
+	// indexes it. Order = first-use order at compile time.
+	Textures []*asset.Texture
 	// ShadowSamples is the per-light shadow-ray count for spherical area
 	// lights (radius > 0); 0 = 1. Set from scene render.shadowSamples at
 	// compile time so both the CPU renderer and the GPU hook see it.
@@ -150,9 +161,13 @@ func (l *LightDef) SampleMeshLight(u1, u2, u3 float64) (geom.Vec3, geom.Vec3) {
 
 // CompiledMaterial holds runtime material parameters.
 type CompiledMaterial struct {
-	Kind         byte // 'm' matte, 'M' metal, 'g' glass, 'e' emissive
-	Albedo       geom.Vec3
-	Pattern      *scene.Pattern // nil = solid albedo
+	Kind    byte // 'm' matte, 'M' metal, 'g' glass, 'e' emissive
+	Albedo  geom.Vec3
+	Pattern *scene.Pattern // nil = solid albedo
+	// Tex is the compiled albedo texture; nil = untextured. TexIdx is its
+	// slot in the World's texture table (GPU upload order).
+	Tex          *asset.Texture
+	TexIdx       int // -1 when untextured
 	Roughness    float64
 	IOR          float64
 	Reflectivity float64 // glass Fresnel base override (0 = pure Schlick)
@@ -225,6 +240,23 @@ func compileMaterial(m *scene.Material) CompiledMaterial {
 	}
 	cm.SpecularK = m.Specular
 	return cm
+}
+
+// AlbedoAtUV evaluates the albedo at a UV coordinate: texture sample
+// multiplied by the material's base Albedo (white = map as-authored).
+// Falls back to the pattern/solid path when untextured — call sites
+// pass the hit's world position too so patterns keep working on
+// textured-and-patterned materials.
+func (cm *CompiledMaterial) AlbedoAtUV(u, v float64, p geom.Vec3) geom.Vec3 {
+	if cm.Tex != nil {
+		r, g, b := cm.Tex.SampleLinear(u, v)
+		return geom.Vec3{
+			X: float64(r) * cm.Albedo.X,
+			Y: float64(g) * cm.Albedo.Y,
+			Z: float64(b) * cm.Albedo.Z,
+		}
+	}
+	return cm.AlbedoAt(p)
 }
 
 // AlbedoAt evaluates the pattern (if any) at a world position.

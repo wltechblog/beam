@@ -57,6 +57,13 @@ typedef struct {
 	__global const bd *mlCDF;
 	__global const bd *mlArea;
 	__global const int *mlStart;
+	// textures: per-tri UVs (6/tri in triOrder), texture table info
+	// (w,h,pixOffset per texture), per-material texture index (-1 none),
+	// concatenated texel data (linear rgb, row-major from top)
+	__global const bd *triUV;
+	__global const int *texInfo;
+	__global const int *matTex;
+	__global const bd *texPix;
 	int shadowSamples; // per-light shadow rays for radius lights (cfg[8])
 	__global const bd *skyStops; // 4/stop: y r g b
 	int nStops;
@@ -80,6 +87,21 @@ typedef struct {
 	bd mediaAlt;     // fogBuf[4]
 	bd mediaOff;     // fogBuf[5]
 } scenebuf;
+
+
+// len_check: textured-material-on-untextured-mesh guard. A mesh without
+// authored UVs uploads all-zero triUV rows; sampling at a constant (0,0)
+// would paint one texel over the whole surface. Exactly-zero corner UVs
+// for all three vertices are degenerate in texture space (a real UV map
+// collapses the triangle to a point) — treat as "no UVs" and fall back to
+// the untextured albedo. kind2==0 (mesh) is the only caller.
+static int len_check(scenebuf *S, khit h) {
+	int o6 = h.tri * 6;
+	if (S->triUV[o6+0] == 0 && S->triUV[o6+1] == 0 &&
+	    S->triUV[o6+2] == 0 && S->triUV[o6+3] == 0 &&
+	    S->triUV[o6+4] == 0 && S->triUV[o6+5] == 0) return 0;
+	return 1;
+}
 
 // sample_mesh_light: area-weighted triangle sampling for mesh lights —
 // exact port of LightDef.SampleMeshLight. u1 = CDF binary search,
@@ -426,7 +448,39 @@ static v3 trace_stack(scenebuf *S, v3 ro, v3 rd, int depth, beam_rng *rng) {
 			}
 			f->hit = 1; f->t = h.t; f->p = h.p; f->n = h.n; f->front = h.front;
 			f->matIdx = S->objMat[h.objIdx];
-			f->albedo = mat_albedo(S->matAlb, S->matP0, S->matP1, S->matPar, S->matFlags, f->matIdx, h.p);
+			// Textured albedo: exact port of Renderer.albedoAt. triUV carries
+			// per-triangle corner UVs in triOrder — GLOBAL tri index (objRoot's
+			// BVH leaf tri lists permute into a single triOrder, so h.tri is
+			// already global). Barycentric interp mirrors positions (w0 = 1-u-v).
+			{
+				int texIdx = S->matTex[f->matIdx];
+				if (texIdx >= 0) {
+					v3 alb = mat_albedo(S->matAlb, S->matP0, S->matP1, S->matPar, S->matFlags, f->matIdx, h.p);
+					int kind2 = S->objKind[h.objIdx];
+					bd tu = 0, tv = 0;
+					int haveUV = 0;
+					if (kind2 == 2 && len_check(S, h)) { // mesh (objKind: 0 sphere, 1 plane, 2 mesh)
+						int o6 = h.tri * 6;
+						tu = S->triUV[o6+0] * (1 - h.bu - h.bv) + S->triUV[o6+2] * h.bu + S->triUV[o6+4] * h.bv;
+						tv = S->triUV[o6+1] * (1 - h.bu - h.bv) + S->triUV[o6+3] * h.bu + S->triUV[o6+5] * h.bv;
+						haveUV = 1;
+					} else if (kind2 == 1) { // plane: automatic planar mapping
+						v3 pn = v3_(S->objB[h.objIdx*3+0], S->objB[h.objIdx*3+1], S->objB[h.objIdx*3+2]);
+						if (pn.y*pn.y >= pn.x*pn.x && pn.y*pn.y >= pn.z*pn.z) { tu = h.p.x; tv = h.p.z; }
+						else if (pn.x*pn.x >= pn.z*pn.z) { tu = h.p.z; tv = h.p.y; }
+						else { tu = h.p.x; tv = h.p.y; }
+						haveUV = 1;
+					}
+					if (haveUV) {
+						v3 ts = tex_sample(S->texPix, S->texInfo, texIdx, tu, tv);
+						f->albedo = vmul(ts, alb); // texture * base albedo (white = as-authored)
+					} else {
+						f->albedo = alb;
+					}
+				} else {
+					f->albedo = mat_albedo(S->matAlb, S->matP0, S->matP1, S->matPar, S->matFlags, f->matIdx, h.p);
+				}
+			}
 
 			int kind = S->matFlags[f->matIdx * 4 + 0];
 			if (kind == 3) { // emissive
@@ -572,6 +626,8 @@ __kernel void trace_pixel(__global const int *cfg,      // [0]=W [1]=H [2]=sampl
                           __global const bd *exposureBuf,
                           __global const bd *mlTri, __global const bd *mlCDF,
                           __global const bd *mlArea, __global const int *mlStart,
+                          __global const bd *triUV, __global const int *texInfo,
+                          __global const int *matTex, __global const bd *texPix,
                           __global uchar *outRGBA) {
 	int xi = get_global_id(0);
 	int yi = get_global_id(1);
@@ -591,6 +647,7 @@ __kernel void trace_pixel(__global const int *cfg,      // [0]=W [1]=H [2]=sampl
 	S.nMats = cfg[6];
 	S.lPos = lPos; S.lDir = lDir; S.lCol = lCol; S.lPar = lPar; S.lFlags = lFlags;
 	S.mlTri = mlTri; S.mlCDF = mlCDF; S.mlArea = mlArea; S.mlStart = mlStart;
+	S.triUV = triUV; S.texInfo = texInfo; S.matTex = matTex; S.texPix = texPix;
 	S.nLights = cfg[7];
 	S.shadowSamples = cfg[8];
 	S.skyStops = skyStops; S.nStops = envFlags[1];

@@ -25,6 +25,41 @@ static v3 vnorm(v3 a) {
 	return vmuls(a, 1 / l);
 }
 
+// ---------- texture sampling (exact port of asset.Texture.SampleLinear) ----------
+// texPix: linear-rgb texels, row-major FROM TOP (image row order). texInfo
+// stride 4: w, h, pixOffset, unused. V is UP in texture space -> row from
+// bottom = image row H-1; wrap addressing on both axes.
+
+static v3 tex_sample(__global const bd *texPix, __global const int *texInfo,
+                     int texIdx, bd u, bd v) {
+	int w = texInfo[texIdx * 4 + 0];
+	int h = texInfo[texIdx * 4 + 1];
+	int off = texInfo[texIdx * 4 + 2];
+	if (w <= 0 || h <= 0) return v3_(1, 1, 1);
+	// wrap to [0,1)
+	u = u - floor(u);
+	v = v - floor(v);
+	bd fx = u * (bd)w;
+	bd fy = (1 - v) * (bd)h;
+	int x0 = (int)floor(fx) % w;
+	int y0 = (int)floor(fy) % h;
+	int x1 = (x0 + 1) % w;
+	int y1 = (y0 + 1) % h;
+	bd ax = fx - floor(fx);
+	bd ay = fy - floor(fy);
+	v3 p00 = v3_(texPix[off + (y0 * w + x0) * 3 + 0], texPix[off + (y0 * w + x0) * 3 + 1], texPix[off + (y0 * w + x0) * 3 + 2]);
+	v3 p10 = v3_(texPix[off + (y0 * w + x1) * 3 + 0], texPix[off + (y0 * w + x1) * 3 + 1], texPix[off + (y0 * w + x1) * 3 + 2]);
+	v3 p01 = v3_(texPix[off + (y1 * w + x0) * 3 + 0], texPix[off + (y1 * w + x0) * 3 + 1], texPix[off + (y1 * w + x0) * 3 + 2]);
+	v3 p11 = v3_(texPix[off + (y1 * w + x1) * 3 + 0], texPix[off + (y1 * w + x1) * 3 + 1], texPix[off + (y1 * w + x1) * 3 + 2]);
+	bd w00 = (1 - ax) * (1 - ay);
+	bd w10 = ax * (1 - ay);
+	bd w01 = (1 - ax) * ay;
+	bd w11 = ax * ay;
+	return v3_(p00.x*w00 + p10.x*w10 + p01.x*w01 + p11.x*w11,
+	           p00.y*w00 + p10.y*w10 + p01.y*w01 + p11.y*w11,
+	           p00.z*w00 + p10.z*w10 + p01.z*w01 + p11.z*w11);
+}
+
 // ---------- material accessors (SoA) ----------
 // matPar stride 9: [0]rough [1]ior [2]refl [3]power [4]diffuse [5]specK [6]pscale [7]pfrom [8]pto
 // matFlags stride 4: [0]kind(0 m,1 M,2 g,3 e) [1]ptype(0 none,1 checker,2 gradient) [2]axis [3]untinted

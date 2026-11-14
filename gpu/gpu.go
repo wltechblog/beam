@@ -89,6 +89,10 @@ type sceneArrays struct {
 	lFlags               []int32   // 3/light: kind, noFalloff, shadowless
 	mlTri, mlCDF, mlArea []float64 // mesh lights: concat tri soup / area CDF / total area
 	mlStart              []int32   // 2/mesh-light: float-start, tri-count
+	triUV                []float64 // 6/tri in triOrder: u0 v0 u1 v1 u2 v2
+	texPix               []float32 // concat texture table: linear rgb, row-major from top
+	texInfo              []int32   // 4/texture: w, h, pixOffset, unused
+	matTex               []int32   // 1/material: texture index or -1
 	skyStops             []float64 // 4/stop
 	envBuf               []float64 // 17
 	envFlags             []int32   // 4
@@ -149,6 +153,16 @@ func flatten(w *render.World) (bufs sceneArrays) {
 					} else {
 						bufs.triN = append(bufs.triN, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 					}
+					// per-triangle UVs in triOrder (zeros when untextured — sampler
+					// never runs for mats with texIdx < 0)
+					if len(o.Mesh.UVs) > 0 {
+						u0, v0 := o.Mesh.UVs[idx[0]].U, o.Mesh.UVs[idx[0]].V
+						u1, v1 := o.Mesh.UVs[idx[1]].U, o.Mesh.UVs[idx[1]].V
+						u2, v2 := o.Mesh.UVs[idx[2]].U, o.Mesh.UVs[idx[2]].V
+						bufs.triUV = append(bufs.triUV, u0, v0, u1, v1, u2, v2)
+					} else {
+						bufs.triUV = append(bufs.triUV, 0, 0, 0, 0, 0, 0)
+					}
 				}
 			} else {
 				bufs.objRoot[i] = -1
@@ -163,6 +177,31 @@ func flatten(w *render.World) (bufs sceneArrays) {
 	bufs.matP1 = make([]float64, max(m, 1)*3)
 	bufs.matPar = make([]float64, max(m, 1)*9)
 	bufs.matFlags = make([]int32, max(m, 1)*4)
+	// texture table: concat texels + per-texture (w, h, pixOffset). matTex
+	// is per-material texture index (-1 = untextured). texPix stays float32
+	// in BOTH fp32 and fp64 builds — texture data is authored 8-bit, fp64
+	// gains nothing and would double upload size.
+	bufs.matTex = make([]int32, max(m, 1))
+	for i := range bufs.matTex {
+		bufs.matTex[i] = -1
+	}
+	for i, mm := range w.Materials {
+		if mm.TexIdx >= 0 && mm.TexIdx < len(w.Textures) {
+			bufs.matTex[i] = int32(mm.TexIdx)
+		}
+	}
+	for _, t := range w.Textures {
+		off := int32(len(bufs.texPix))
+		bufs.texInfo = append(bufs.texInfo, int32(t.W), int32(t.H), off, 0)
+		bufs.texPix = append(bufs.texPix, t.Pix...)
+	}
+	if len(bufs.texPix) == 0 {
+		bufs.texPix = []float32{0} // zero-length OpenCL buffers are invalid
+	}
+	if len(bufs.texInfo) == 0 {
+		bufs.texInfo = []int32{0, 0, 0, 0}
+	}
+
 	for i, mm := range w.Materials {
 		put3(bufs.matAlb, i*3, mm.Albedo)
 		bufs.matPar[i*9+0] = mm.Roughness
@@ -516,6 +555,16 @@ func RenderGPU(w *render.World, cam *render.Camera, width, height, samples, maxD
 		}
 		return bb, ctx.SetArg(idx, bb)
 	}
+	f32 := func(idx int, v []float32) (*Buffer, error) {
+		if len(v) == 0 {
+			v = make([]float32, 1)
+		}
+		bb, e := ctx.CreateBufferRO(len(v)*4, unsafe.Pointer(&v[0]))
+		if e != nil {
+			return nil, e
+		}
+		return bb, ctx.SetArg(idx, bb)
+	}
 
 	handles := []*Buffer{}
 	mk := func(bb *Buffer, e error) *Buffer {
@@ -560,6 +609,10 @@ func RenderGPU(w *render.World, cam *render.Camera, width, height, samples, maxD
 	mk(f64(32, b.mlCDF))
 	mk(f64(33, b.mlArea))
 	mk(i32(34, b.mlStart))
+	mk(f64(35, b.triUV))
+	mk(i32(36, b.texInfo))
+	mk(i32(37, b.matTex))
+	mk(f32(38, b.texPix))
 	defer func() {
 		for _, h := range handles {
 			h.Release()
@@ -571,7 +624,7 @@ func RenderGPU(w *render.World, cam *render.Camera, width, height, samples, maxD
 		return nil, 0, err
 	}
 	defer bout.Release()
-	if err := ctx.SetArg(35, bout); err != nil {
+	if err := ctx.SetArg(39, bout); err != nil {
 		return nil, 0, err
 	}
 

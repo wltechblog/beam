@@ -143,7 +143,7 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 			if o.Transform != nil {
 				mesh = transformMesh(mesh, o.Transform)
 			}
-			obj = Object3D{Kind: 'm', Mesh: mesh, BVH: geom.BuildMesh(mesh), MatIdx: mi}
+			obj = Object3D{Kind: 'm', Mesh: mesh, BVH: buildMeshCached(mesh), MatIdx: mi}
 		case "mesh":
 			if resolver == nil {
 				continue
@@ -155,7 +155,7 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 			if o.Transform != nil {
 				m = transformMesh(m, o.Transform)
 			}
-			obj = Object3D{Kind: 'm', Mesh: m, BVH: geom.BuildMesh(m), MatIdx: mi}
+			obj = Object3D{Kind: 'm', Mesh: m, BVH: buildMeshCached(m), MatIdx: mi}
 		case "model":
 			if resolver == nil {
 				continue
@@ -182,7 +182,7 @@ func Compile(s *scene.Scene, resolver MeshResolver) (*World, error) {
 			if o.Transform != nil {
 				m = transformMesh(m, o.Transform)
 			}
-			obj = Object3D{Kind: 'm', Mesh: m, BVH: geom.BuildMesh(m), MatIdx: mi}
+			obj = Object3D{Kind: 'm', Mesh: m, BVH: buildMeshCached(m), MatIdx: mi}
 		default:
 			continue
 		}
@@ -388,7 +388,7 @@ func meshObject(m *geom.TriangleMesh, tm geom.Mat4, matIdx int) Object3D {
 		}
 		m.Norms = norms
 	}
-	return Object3D{Kind: 'm', Mesh: m, BVH: geom.BuildMesh(m), MatIdx: matIdx}
+	return Object3D{Kind: 'm', Mesh: m, BVH: buildMeshCached(m), MatIdx: matIdx}
 }
 
 func buildMatrices(t *scene.Transform) (geom.Mat4, geom.Mat4) {

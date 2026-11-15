@@ -129,7 +129,7 @@ func compileModel(
 		}
 		mi := modelMatIdx(p.MatIdx, p.MatName)
 		out = append(out, &Object3D{
-			Kind: 'm', Mesh: mesh, BVH: geom.BuildMesh(mesh), MatIdx: mi,
+			Kind: 'm', Mesh: mesh, BVH: buildMeshCached(mesh), MatIdx: mi,
 		})
 	}
 	return out

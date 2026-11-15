@@ -167,6 +167,14 @@ func (lm *LoadedModel) decodeImages(doc *gltf.Document, modelPath string) {
 		case img.URI != "":
 			if d, err := os.ReadFile(filepath.Join(dir, img.URI)); err == nil {
 				data = d
+			} else {
+				// External companion texture missing — the model will
+				// render with flat factor colors. This is almost always
+				// an incomplete asset copy (the glTF spec resolves URIs
+				// relative to the model file), so say so, loudly: a
+				// whole city of white trucks traces back to this line.
+				fmt.Fprintf(os.Stderr, "beam: model %s: image %d: cannot load %q: %v (material falls back to flat base color)\n",
+					filepath.Base(modelPath), i, img.URI, err)
 			}
 		}
 		name := img.Name
@@ -248,9 +256,16 @@ func (lm *LoadedModel) appendPrimitive(doc *gltf.Document, prim *gltf.Primitive,
 	if uvRef, ok := prim.Attributes["TEXCOORD_0"]; ok {
 		if uv, err := viewOf(doc, uvRef); err == nil && doc.Accessors[uvRef].Count == count {
 			for i := 0; i < count; i++ {
+				// glTF UVs are top-left origin (v-down); beam textures
+				// sample v-up (asset/texture.go: fy = (1-v)*H, the OBJ
+				// convention). Flip once here so both CPU and GPU
+				// samplers see consistent coordinates — without this,
+				// every glTF texture samples from the vertically
+				// mirrored position (invisible on full-image maps,
+				// garbage on texture atlases).
 				m.UVs = append(m.UVs, geom.UV{
 					U: uv.floatElem(i, 0),
-					V: uv.floatElem(i, 1),
+					V: 1 - uv.floatElem(i, 1),
 				})
 			}
 		}
